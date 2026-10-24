@@ -3,6 +3,7 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
+import { dataDir } from "@/lib/data/paths";
 import { getRepository } from "@/lib/data";
 import { saveUploadedMedia } from "@/lib/services/life";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     if (upload.error) return Response.json({ error: upload.error.message }, { status: 500 });
   } else {
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 80) || "upload";
-    storagePath = path.join(process.cwd(), ".data", "uploads", `${id}-${safe}`);
+    storagePath = path.join(dataDir(), "uploads", `${id}-${safe}`);
     await mkdir(path.dirname(storagePath), { recursive: true });
     await writeFile(storagePath, bytes);
   }

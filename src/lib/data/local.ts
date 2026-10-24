@@ -4,9 +4,10 @@ import path from "path";
 import type { Database, Row, TableName } from "@/lib/domain";
 import { emptyDatabase, createMemoryRepository } from "@/lib/data/memory";
 import type { Repository } from "@/lib/data/repository";
+import { dataDir } from "@/lib/data/paths";
 import { ensureContent, ensureDemo, ensureOperator } from "@/lib/demo/seed";
 
-const filePath = path.join(process.cwd(), ".data", "db.json");
+const filePath = path.join(dataDir(), "db.json");
 const store = globalThis as { __couplesyncRepo?: Promise<Repository>; __couplesyncQueue?: Promise<unknown> };
 store.__couplesyncQueue ??= Promise.resolve();
 
@@ -29,10 +30,14 @@ async function readDatabase(): Promise<Database> {
 }
 
 async function writeDatabase(db: Database) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, JSON.stringify(db));
-  await rename(temporary, filePath);
+  try {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    const temporary = `${filePath}.tmp`;
+    await writeFile(temporary, JSON.stringify(db));
+    await rename(temporary, filePath);
+  } catch (error) {
+    console.error("Could not save the local database", error instanceof Error ? error.message : "unknown error");
+  }
 }
 
 export function getLocalRepository() {

@@ -33,7 +33,8 @@ export async function sendAppEmail(input: { to: string; subject: string; text: s
     if (!response.ok) {
       const detail = await response.text();
       console.error("Resend rejected the message", response.status, detail.slice(0, 300));
-      return { ok: false as const, reason: "failed" as const };
+      const testing = detail.includes("testing emails");
+      return { ok: false as const, reason: testing ? ("testing" as const) : ("failed" as const) };
     }
     return { ok: true as const };
   } catch (error) {

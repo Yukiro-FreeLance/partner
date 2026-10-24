@@ -29,7 +29,10 @@ function formString(formData: FormData, key: string) {
 async function mailedOrLocal(input: { to: string; subject: string; intro: string; path: string; localMessage: string; sentMessage: string }): Promise<FormState> {
   const sent = await sendAuthLink(input);
   if (sent.ok) return { message: input.sentMessage };
-  if (sent.reason === "failed") return { error: "The email could not be sent. Try again in a few minutes." };
+  if (sent.reason === "testing") {
+    return { message: "Your account is ready. Resend is still in test mode, so it can only mail the inbox that owns the API key. Use this one-time link until a domain is verified at resend.com/domains.", link: input.path };
+  }
+  if (sent.reason === "failed") return { message: "The email could not be sent. Use this one-time link to continue.", link: input.path };
   return { message: input.localMessage, link: input.path };
 }
 

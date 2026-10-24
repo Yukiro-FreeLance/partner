@@ -130,7 +130,7 @@ This workspace has not been deployed.
 ## Vercel
 
 1. Import the repository in Vercel. Framework preset: Next.js. Install command: `npm install`.
-2. Add the environment variables from `.env.example`. Use the production site URL.
+2. Add the environment variables from `.env.example`. Use the production site URL. `AUTH_SECRET` is required. Without Supabase, the local database is stored in `/tmp` on Vercel, so it lasts for that running instance and is seeded again on a cold start. Use Supabase when accounts must survive a new instance.
 3. Run the Supabase migration and `npm run seed` against that project before inviting real people.
 4. Deploy. Vercel provides HTTPS. Point a custom domain at the project and set `NEXT_PUBLIC_SITE_URL` to that `https://` origin.
 5. Add the production `/auth/callback` and `/reset-password` URLs in Supabase.
