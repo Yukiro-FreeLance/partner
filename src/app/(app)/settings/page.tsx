@@ -10,7 +10,8 @@ import { activeMembership, otherPartner } from "@/lib/services/access";
 
 export const metadata = { title: "Settings" };
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  const { saved } = await searchParams;
   const user = await requireUser();
   const repo = await getRepository();
   const membership = await activeMembership(repo, user.profile.id);
@@ -20,11 +21,13 @@ export default async function SettingsPage() {
   const requests = await repo.list("reconnectRequests", { eq: { partnerId: user.profile.id, status: "pending" } });
   return (
     <main className="mx-auto grid w-full max-w-6xl items-start gap-6 px-4 py-6 lg:grid-cols-3 lg:px-8">
+      {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 lg:col-span-3" role="status">Settings saved.</p>}
       <section className="h-fit rounded-[1.75rem] bg-white p-6 text-center shadow-[var(--shadow)]">
         <h1 className="font-serif text-3xl">Settings</h1>
         <div className="mt-6"><AvatarUpload name={user.profile.displayName} src={user.profile.avatarUrl} /></div>
       </section>
       <form id="privacy" action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)] sm:grid-cols-2 lg:col-span-2">
+        <input type="hidden" name="returnTo" value="/settings" />
         <label className="grid gap-2 sm:col-span-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /></label>
         <RelationshipStatusField label="Relationship" defaultValue={user.profile.relationshipStatus} />
         <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" defaultValue={user.profile.relationshipStartedOn ?? ""} /></label>

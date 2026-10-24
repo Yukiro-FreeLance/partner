@@ -19,28 +19,36 @@ const rows = [
   ["/support", "Help & Support", LifeBuoy],
 ] as const;
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  const { saved } = await searchParams;
   const user = await requireUser();
   const achievements = await (await getRepository()).list("userAchievements", { eq: { userId: user.profile.id } });
   const handle = user.profile.email.split("@")[0];
   return (
-    <main className="mx-auto grid w-full max-w-6xl items-start gap-6 px-4 py-6 lg:grid-cols-2 xl:grid-cols-3 lg:px-8">
-      <section className="h-fit overflow-hidden rounded-[1.75rem] bg-white text-center shadow-[var(--shadow)]">
-        <BannerUpload src={user.profile.bannerUrl} control="top" className="h-48">
-          <h1 className="absolute top-4 left-5 z-10 font-serif text-2xl text-white drop-shadow">Profile</h1>
-        </BannerUpload>
-        <div className="relative z-10 -mt-16 px-6">
-          <AvatarUpload name={user.profile.displayName} src={user.profile.avatarUrl} />
+    <main className="w-full">
+      <section className="bg-white shadow-[var(--shadow)]">
+        <BannerUpload src={user.profile.bannerUrl} control="top" className="h-56 w-full sm:h-72 lg:h-[22.5rem]" />
+        <div className="px-4 sm:px-8 lg:px-10">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="relative z-10 -mt-16 sm:-mt-20">
+              <AvatarUpload name={user.profile.displayName} src={user.profile.avatarUrl} layout="cover" />
+            </div>
+            <div className="min-w-0 pb-6 sm:pb-7">
+              <h1 className="font-serif text-4xl">{user.profile.displayName}</h1>
+              <p className="text-sm text-muted-foreground">@{handle}</p>
+              <p className="mt-2 text-sm text-rose">{user.preferences.locale === "fil" ? "Filipino" : "English"} · {achievements.length} achievements · {user.preferences.points} points</p>
+            </div>
+          </div>
         </div>
-        <p className="mt-4 font-serif text-3xl">{user.profile.displayName}</p>
-        <p className="text-sm text-muted-foreground">@{handle}</p>
-        <p className="mt-2 pb-6 text-sm text-rose">{user.preferences.locale === "fil" ? "Filipino" : "English"} · {achievements.length} achievements · {user.preferences.points} points</p>
       </section>
-      <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
+      <div className="grid w-full items-start gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-8">
+        {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 lg:col-span-2" role="status">Profile saved.</p>}
+        <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-serif text-2xl">Profile settings</h2>
             <Link href="/settings" className="flex size-11 items-center justify-center rounded-full bg-secondary" aria-label="Account settings"><Settings className="size-5" /></Link>
           </div>
+          <input type="hidden" name="returnTo" value="/profile" />
           <label className="grid gap-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /></label>
           <div className="grid gap-4 sm:grid-cols-2">
             <RelationshipStatusField label="Relationship" defaultValue={user.profile.relationshipStatus} />
@@ -62,35 +70,36 @@ export default async function ProfilePage() {
           <Button type="submit">Save profile</Button>
         </form>
         <div className="grid h-fit gap-4">
-        <nav className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
-          {rows.map(([href, label, Icon]) => (
-            <Link key={label} href={href} className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm last:border-b-0">
-              <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Icon className="size-4" aria-hidden /></span>
-              <span className="flex-1">{label}</span>
-              <span aria-hidden className="text-muted-foreground">›</span>
-            </Link>
-          ))}
-          {(user.profile.role === "admin" || user.profile.role === "super_admin") && (
-            <Link href="/admin" className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm">
-              <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Lock className="size-4" aria-hidden /></span>
-              <span className="flex-1">Question administration</span>
-              <span aria-hidden className="text-muted-foreground">›</span>
-            </Link>
-          )}
-          {user.profile.role === "super_admin" && (
-            <Link href="/admin/users" className="flex min-h-14 items-center gap-3 px-4 text-sm">
-              <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Users className="size-4" aria-hidden /></span>
-              <span className="flex-1">User list</span>
-              <span aria-hidden className="text-muted-foreground">›</span>
-            </Link>
-          )}
-        </nav>
-        <form action={logoutAction}>
-          <button className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[1.75rem] bg-[#fff1f2] text-sm font-medium text-rose">
-            <LogOut className="size-4" aria-hidden /> Log out
-          </button>
-        </form>
+          <nav className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
+            {rows.map(([href, label, Icon]) => (
+              <Link key={label} href={href} className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm last:border-b-0">
+                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Icon className="size-4" aria-hidden /></span>
+                <span className="flex-1">{label}</span>
+                <span aria-hidden className="text-muted-foreground">›</span>
+              </Link>
+            ))}
+            {(user.profile.role === "admin" || user.profile.role === "super_admin") && (
+              <Link href="/admin" className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm">
+                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Lock className="size-4" aria-hidden /></span>
+                <span className="flex-1">Question administration</span>
+                <span aria-hidden className="text-muted-foreground">›</span>
+              </Link>
+            )}
+            {user.profile.role === "super_admin" && (
+              <Link href="/admin/users" className="flex min-h-14 items-center gap-3 px-4 text-sm">
+                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Users className="size-4" aria-hidden /></span>
+                <span className="flex-1">User list</span>
+                <span aria-hidden className="text-muted-foreground">›</span>
+              </Link>
+            )}
+          </nav>
+          <form action={logoutAction}>
+            <button className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[1.75rem] bg-[#fff1f2] text-sm font-medium text-rose">
+              <LogOut className="size-4" aria-hidden /> Log out
+            </button>
+          </form>
         </div>
+      </div>
     </main>
   );
 }

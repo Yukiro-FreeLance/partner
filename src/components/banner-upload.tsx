@@ -33,9 +33,9 @@ export function BannerUpload({ src, className, children, control = "bottom" }: {
     body.set("purpose", "banner");
     try {
       const response = await fetch("/api/media", { method: "POST", body });
-      const json = (await response.json()) as { id?: string; error?: string };
+      const json = (await response.json().catch(() => ({}))) as { id?: string; error?: string };
       if (!response.ok || !json.id) {
-        setError(json.error ?? "The banner could not be saved.");
+        setError(json.error ?? (response.status === 413 ? "That photo is too large. Use one under 4 MB." : "The banner could not be saved."));
         setPending(false);
         return;
       }

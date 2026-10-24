@@ -1,7 +1,6 @@
 import { createMemberAction, setMemberRoleAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
-import { isSupabaseConfigured } from "@/lib/config";
 import { getRepository } from "@/lib/data";
 import { requireUser } from "@/lib/auth/session";
 
@@ -13,14 +12,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (actor.role !== "super_admin") return <main className="p-6">The user list is limited to super admins. Sign in with the account in SUPER_ADMIN_EMAILS. Demo profiles stay members.</main>;
   const { created, error, saved } = await searchParams;
   const people = (await (await getRepository()).list("profiles", {})).sort((a, b) => a.displayName.localeCompare(b.displayName));
-  const temporary = Boolean(process.env.VERCEL) && !isSupabaseConfigured();
   return (
-    <main className="mx-auto grid w-full max-w-6xl items-start gap-6">
+    <main className="grid w-full items-start gap-6">
       <div>
         <h1 className="font-serif text-4xl">User list</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Names and roles only. Quiz answers, notes, and personality results are not shown. Impersonation opens that person&apos;s home and can be stopped from the banner.</p>
       </div>
-      {temporary && <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Production is not using a shared database, so a saved role can disappear on the next visit. Add that email to ADMIN_EMAILS to keep an admin.</p>}
       {saved && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Role saved for {saved}.</p>}
       {created === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Account created. They can sign in with that email and password.</p>}
       {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{error}</p>}
@@ -40,35 +37,54 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           <Button type="submit">Create user</Button>
         </div>
       </form>
-      <ul className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {people.map((person) => (
-          <li key={person.id} className="grid h-fit content-start gap-3 rounded-[1.5rem] bg-white p-4 shadow-[var(--shadow)]">
-            <div>
-              <p className="font-medium">{person.displayName}</p>
-              <p className="break-all text-sm text-muted-foreground">{person.email}</p>
-              <p className="text-xs text-muted-foreground">{person.role === "super_admin" ? "Super admin" : person.role === "admin" ? "Admin" : "Member"}{person.isDemo ? " · Fictional demo" : ""}</p>
-            </div>
-            {person.id !== actor.id && person.role !== "super_admin" && (
-              <div className="flex flex-wrap items-center gap-2">
-                {!person.isDemo && (
-                  <form action={setMemberRoleAction} className="flex flex-wrap items-center gap-2">
-                    <input type="hidden" name="userId" value={person.id} />
-                    <select key={`${person.id}-${person.role}`} name="role" defaultValue={person.role === "admin" ? "admin" : "user"} aria-label={`Role for ${person.displayName}`} className="h-11 rounded-full border bg-white px-3 text-sm">
-                      <option value="user">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <Button type="submit" variant="secondary">Save role</Button>
-                  </form>
-                )}
-                <form method="post" action="/api/admin/impersonate">
-                  <input type="hidden" name="userId" value={person.id} />
-                  <Button type="submit" variant="outline">Impersonate</Button>
-                </form>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+      <div className="overflow-x-auto rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
+        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-[#f3e8f5] text-xs tracking-wide text-muted-foreground uppercase">
+              <th className="px-4 py-3 font-medium">Name</th>
+              <th className="px-4 py-3 font-medium">Email</th>
+              <th className="px-4 py-3 font-medium">Role</th>
+              <th className="px-4 py-3 font-medium">Account</th>
+              <th className="px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((person) => {
+              const roleLabel = person.role === "super_admin" ? "Super admin" : person.role === "admin" ? "Admin" : "Member";
+              return (
+                <tr key={person.id} className="border-b border-[#f8f1fa] last:border-b-0">
+                  <td className="px-4 py-3 font-medium">{person.displayName}</td>
+                  <td className="px-4 py-3 break-all text-muted-foreground">{person.email}</td>
+                  <td className="px-4 py-3">{roleLabel}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{person.isDemo ? "Fictional demo" : "Real account"}</td>
+                  <td className="px-4 py-3">
+                    {person.id !== actor.id && person.role !== "super_admin" ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!person.isDemo && (
+                          <form action={setMemberRoleAction} className="flex flex-wrap items-center gap-2">
+                            <input type="hidden" name="userId" value={person.id} />
+                            <select key={`${person.id}-${person.role}`} name="role" defaultValue={person.role === "admin" ? "admin" : "user"} aria-label={`Role for ${person.displayName}`} className="h-11 rounded-full border bg-white px-3 text-sm">
+                              <option value="user">Member</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            <Button type="submit" variant="secondary">Save role</Button>
+                          </form>
+                        )}
+                        <form method="post" action="/api/admin/impersonate">
+                          <input type="hidden" name="userId" value={person.id} />
+                          <Button type="submit" variant="outline">Impersonate</Button>
+                        </form>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }

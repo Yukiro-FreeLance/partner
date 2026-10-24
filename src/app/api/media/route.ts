@@ -1,10 +1,8 @@
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
-import { dataDir } from "@/lib/data/paths";
 import { getRepository } from "@/lib/data";
+import { storeMediaFile } from "@/lib/media-files";
 import { saveUploadedMedia } from "@/lib/services/life";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -39,10 +37,12 @@ export async function POST(request: Request) {
     const upload = await createAdminClient().storage.from("private-media").upload(storagePath, bytes, { contentType });
     if (upload.error) return Response.json({ error: upload.error.message }, { status: 500 });
   } else {
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 80) || "upload";
-    storagePath = path.join(dataDir(), "uploads", `${id}-${safe}`);
-    await mkdir(path.dirname(storagePath), { recursive: true });
-    await writeFile(storagePath, bytes);
+    try {
+      storagePath = await storeMediaFile(id, bytes, contentType, file.name);
+    } catch (error) {
+      console.error("Media upload failed", error instanceof Error ? error.message : "unknown error");
+      return Response.json({ error: "The photo could not be saved. Try a smaller JPEG, PNG, WEBP, or GIF." }, { status: 500 });
+    }
   }
   const repo = await getRepository();
   const saved = await saveUploadedMedia(repo, user.profile.id, { fileName: file.name, contentType, size: file.size, storagePath }, String(form.get("memoryId") || "") || undefined);

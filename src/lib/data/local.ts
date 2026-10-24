@@ -1,6 +1,7 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
+import { BlobNotFoundError, get, put } from "@vercel/blob";
 import type { Database, Row, TableName } from "@/lib/domain";
 import { emptyDatabase, createMemoryRepository } from "@/lib/data/memory";
 import type { Repository } from "@/lib/data/repository";
@@ -8,7 +9,8 @@ import { dataDir } from "@/lib/data/paths";
 import { ensureContent, ensureDemo, ensureOperator } from "@/lib/demo/seed";
 
 const filePath = path.join(dataDir(), "db.json");
-const store = globalThis as { __couplesyncRepo?: Promise<Repository>; __couplesyncQueue?: Promise<unknown> };
+const blobPath = "couplesync/db.json";
+const store = globalThis as { __couplesyncRepo?: Promise<Repository>; __couplesyncQueue?: Promise<unknown>; __couplesyncShared?: Repository };
 store.__couplesyncQueue ??= Promise.resolve();
 
 function locked<T>(work: () => Promise<T>) {
@@ -18,6 +20,21 @@ function locked<T>(work: () => Promise<T>) {
     () => undefined,
   );
   return run;
+}
+
+function sharedEnabled() {
+  return Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+function operatorReady(db: Database) {
+  const emails = (process.env.SUPER_ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email && !email.endsWith("@demo.couplesync.local"));
+  if (emails.length === 0) return true;
+  return emails.every((email) =>
+    db.profiles.some((profile) => profile.email.toLowerCase() === email && profile.role === "super_admin" && profile.emailVerified && !profile.isDemo),
+  );
 }
 
 async function readDatabase(): Promise<Database> {
@@ -40,7 +57,96 @@ async function writeDatabase(db: Database) {
   }
 }
 
+async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }> {
+  try {
+    const loaded = await get(blobPath, { access: "private", useCache: false });
+    if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return { db: emptyDatabase(), etag: null };
+    const raw = await new Response(loaded.stream).text();
+    return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: loaded.blob.etag };
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
+    throw error;
+  }
+}
+
+async function writeBlobDatabase(db: Database) {
+  const saved = await put(blobPath, JSON.stringify(db), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+    cacheControlMaxAge: 60,
+  });
+  return saved.etag;
+}
+
+async function loadPrepared() {
+  const { db } = await readBlobDatabase();
+  const memory = createMemoryRepository(db);
+  let changed = false;
+  if (db.questions.length === 0) {
+    await ensureContent(memory);
+    changed = true;
+  }
+  if (!db.profiles.some((profile) => profile.isDemo)) {
+    try {
+      await ensureDemo(memory);
+      changed = true;
+    } catch (error) {
+      console.error("Demo seed failed", error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  if (!operatorReady(db)) changed = (await ensureOperator(memory)) || changed;
+  if (changed) await writeBlobDatabase(memory.snapshot());
+  return { memory };
+}
+
+function sharedRepository(): Repository {
+  async function mutate<T>(change: (memory: ReturnType<typeof createMemoryRepository>) => Promise<T>) {
+    return locked(async () => {
+      const { memory } = await loadPrepared();
+      const result = await change(memory);
+      await writeBlobDatabase(memory.snapshot());
+      return result;
+    });
+  }
+  return {
+    kind: "memory",
+    async list(table, where, options) {
+      const { memory } = await loadPrepared();
+      return memory.list(table, where, options);
+    },
+    async find(table, where) {
+      const { memory } = await loadPrepared();
+      return memory.find(table, where);
+    },
+    async insert(table, row) {
+      const saved = await mutate((memory) => memory.insert(table, row));
+      return saved as Row<TableName>;
+    },
+    async update(table, id, patch) {
+      const saved = await mutate((memory) => memory.update(table, id, patch));
+      return saved as Row<TableName>;
+    },
+    async updateWhere(table, where, patch) {
+      return mutate((memory) => memory.updateWhere(table, where, patch));
+    },
+    async remove(table, id) {
+      await mutate(async (memory) => {
+        await memory.remove(table, id);
+      });
+    },
+    async removeWhere(table, where) {
+      return mutate((memory) => memory.removeWhere(table, where));
+    },
+  };
+}
+
 export function getLocalRepository() {
+  if (sharedEnabled()) {
+    store.__couplesyncShared ??= sharedRepository();
+    return Promise.resolve(store.__couplesyncShared);
+  }
   store.__couplesyncRepo ??= locked(async () => {
     const db = await readDatabase();
     const memory = createMemoryRepository(db);

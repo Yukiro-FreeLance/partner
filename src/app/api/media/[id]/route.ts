@@ -1,9 +1,7 @@
-import { readFile } from "fs/promises";
-import path from "path";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
-import { dataDir } from "@/lib/data/paths";
 import { getRepository } from "@/lib/data";
+import { readMediaFile } from "@/lib/media-files";
 import { activeMembership, requireMembership } from "@/lib/services/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -36,9 +34,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (signed.error || !signed.data?.signedUrl) return new Response("File unavailable.", { status: 404 });
     return Response.redirect(signed.data.signedUrl);
   }
-  const root = path.resolve(dataDir(), "uploads");
-  const resolved = path.resolve(media.storagePath);
-  if (!resolved.startsWith(root)) return new Response("Not found.", { status: 404 });
-  const bytes = await readFile(resolved);
-  return new Response(bytes, { headers: { "Content-Type": media.contentType, "Cache-Control": "private, no-store" } });
+  const bytes = await readMediaFile(media.storagePath);
+  if (!bytes) return new Response("File unavailable.", { status: 404 });
+  return new Response(new Uint8Array(bytes), { headers: { "Content-Type": media.contentType, "Cache-Control": "private, no-store" } });
 }

@@ -458,30 +458,36 @@ export async function customCardAction(formData: FormData) {
 export async function settingsAction(formData: FormData) {
   const user = await requireUser();
   const repo = await getRepository();
-  const theme = formString(formData, "theme");
-  const locale = formString(formData, "locale") === "fil" ? "fil" : "en";
+  const chosenTheme = formString(formData, "theme");
+  const theme: "light" | "dark" | "system" = chosenTheme === "dark" || chosenTheme === "system" ? chosenTheme : "light";
+  const locale: "en" | "fil" = formString(formData, "locale") === "fil" ? "fil" : "en";
   await repo.update("profiles", user.profile.id, {
     displayName: formString(formData, "displayName").trim() || user.profile.displayName,
     relationshipStatus: formString(formData, "relationshipStatus") || null,
     relationshipStartedOn: formString(formData, "relationshipStartedOn") || null,
     updatedAt: new Date().toISOString(),
   });
-  await repo.update("userPreferences", user.profile.id, {
-    ...user.preferences,
-    theme: theme === "dark" || theme === "system" ? theme : "light",
+  const preferences = await repo.find("userPreferences", { eq: { userId: user.profile.id } });
+  const nextPreferences = {
+    ...defaultPreferences(user.profile.id),
+    ...(preferences ?? {}),
+    theme,
     locale,
     emailNotifications: formData.get("emailNotifications") === "on",
     inAppNotifications: formData.get("inAppNotifications") === "on",
     streakPaused: formData.get("streakPaused") === "on",
     reducedMotion: formData.get("reducedMotion") === "on",
     reminderHour: formString(formData, "reminderHour") ? Number(formString(formData, "reminderHour")) : null,
-  });
+  };
+  if (preferences) await repo.update("userPreferences", user.profile.id, nextPreferences);
+  else await repo.insert("userPreferences", nextPreferences);
   const store = await cookies();
-  store.set("theme", theme === "dark" || theme === "system" ? theme : "light", { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  store.set("theme", theme, { path: "/", maxAge: 60 * 60 * 24 * 365 });
   store.set("locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
   revalidatePath("/settings");
   revalidatePath("/profile");
   revalidatePath("/home");
+  redirect(formString(formData, "returnTo") === "/profile" ? "/profile?saved=1" : "/settings?saved=1");
 }
 
 export async function readNotificationsAction() {
