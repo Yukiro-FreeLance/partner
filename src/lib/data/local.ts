@@ -1,8 +1,8 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
-import { BlobNotFoundError, get, head, put } from "@vercel/blob";
-import { blobTokenOptions } from "@/lib/blob-auth";
+import { BlobNotFoundError, get, put } from "@vercel/blob";
+import { blobPaused, blobTokenOptions, pauseBlob } from "@/lib/blob-auth";
 import { packDatabase, unpackDatabase } from "@/lib/data/compact";
 import type { Database, Row, TableName } from "@/lib/domain";
 import { emptyDatabase, createMemoryRepository } from "@/lib/data/memory";
@@ -12,7 +12,7 @@ import { ensureContent, ensureDemo, ensureOperator } from "@/lib/demo/seed";
 
 const filePath = path.join(dataDir(), "db.json");
 const blobPath = "couplesync/db.json";
-const readCacheMs = 1500;
+const readCacheMs = 60_000;
 const store = globalThis as {
   __couplesyncRepo?: Promise<Repository>;
   __couplesyncQueue?: Promise<unknown>;
@@ -70,6 +70,7 @@ async function writeDatabase(db: Database) {
 }
 
 async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }> {
+  if (blobPaused()) throw new Error("Blob store is paused until the usage limit resets");
   try {
     const loaded = await get(blobPath, { access: "private", ...blobTokenOptions() });
     if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return { db: emptyDatabase(), etag: null };
@@ -77,41 +78,28 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
     return { db: databaseFromBytes(raw), etag: loaded.blob.etag };
   } catch (error) {
     if (error instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
-    console.error("Blob read failed", error instanceof Error ? error.message : "unknown error", "token", Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()), "store", Boolean(process.env.BLOB_STORE_ID));
-    try {
-      const info = await head(blobPath, blobTokenOptions());
-      const token = blobTokenOptions().token;
-      const plain = await fetch(info.downloadUrl);
-      if (plain.ok) {
-        const raw = Buffer.from(await plain.arrayBuffer());
-        return { db: databaseFromBytes(raw), etag: info.etag };
-      }
-      const authed = await fetch(info.downloadUrl, { headers: token ? { authorization: `Bearer ${token}` } : {} });
-      if (authed.ok) {
-        const raw = Buffer.from(await authed.arrayBuffer());
-        return { db: databaseFromBytes(raw), etag: info.etag };
-      }
-      const detail = await authed.text();
-      console.error("Blob download", plain.status, authed.status, detail.slice(0, 300));
-      throw error;
-    } catch (fallbackError) {
-      if (fallbackError instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
-      if (fallbackError !== error) console.error("Blob metadata read failed", fallbackError instanceof Error ? fallbackError.message : "unknown error");
-      throw error;
-    }
+    pauseBlob(error);
+    console.error("Blob read failed", error instanceof Error ? error.message : "unknown error");
+    throw error;
   }
 }
 
 async function writeBlobDatabase(db: Database) {
-  const saved = await put(blobPath, await packDatabase(db), {
-    access: "private",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/gzip",
-    cacheControlMaxAge: 60,
-    ...blobTokenOptions(),
-  });
-  return saved.etag;
+  if (blobPaused()) throw new Error("Blob store is paused until the usage limit resets");
+  try {
+    const saved = await put(blobPath, await packDatabase(db), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/gzip",
+      cacheControlMaxAge: 300,
+      ...blobTokenOptions(),
+    });
+    return saved.etag;
+  } catch (error) {
+    pauseBlob(error);
+    throw error;
+  }
 }
 
 async function loadPrepared() {

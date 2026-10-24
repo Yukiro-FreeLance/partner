@@ -2,7 +2,7 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { BlobNotFoundError, get, put } from "@vercel/blob";
-import { blobEnabled, blobTokenOptions } from "@/lib/blob-auth";
+import { blobEnabled, blobPaused, blobTokenOptions, pauseBlob } from "@/lib/blob-auth";
 import { packBytes, unpackBytes } from "@/lib/data/compact";
 import { dataDir } from "@/lib/data/paths";
 
@@ -12,14 +12,20 @@ export async function storeManagedBytes(pathname: string, bytes: Buffer, content
   const packed = packBytes(bytes);
   const storedPath = packed.compressed ? `${pathname}.gz` : pathname;
   if (blobEnabled()) {
-    await put(storedPath, packed.body, {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: packed.compressed ? "application/gzip" : contentType,
-      cacheControlMaxAge: 60,
-      ...blobTokenOptions(),
-    });
+    if (blobPaused()) throw new Error("Blob store is paused until the usage limit resets");
+    try {
+      await put(storedPath, packed.body, {
+        access: "private",
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: packed.compressed ? "application/gzip" : contentType,
+        cacheControlMaxAge: 300,
+        ...blobTokenOptions(),
+      });
+    } catch (error) {
+      pauseBlob(error);
+      throw error;
+    }
     return storedPath;
   }
   const relative = storedPath.replace(/^couplesync\//, "");
@@ -44,12 +50,14 @@ export async function readMediaFile(storagePath: string) {
 }
 
 async function readBlob(storagePath: string) {
+  if (blobPaused()) return null;
   try {
     const loaded = await get(storagePath, { access: "private", ...blobTokenOptions() });
     if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return null;
     return Buffer.from(await new Response(loaded.stream).arrayBuffer());
   } catch (error) {
     if (error instanceof BlobNotFoundError) return null;
+    pauseBlob(error);
     throw error;
   }
 }
