@@ -46,6 +46,18 @@ async function readSource(): Promise<Database> {
   }
 }
 
+function contentTypeFor(db: Database, storagePath: string) {
+  const media = db.mediaObjects.find((item) => item.storagePath === storagePath);
+  if (media?.contentType) return media.contentType;
+  for (const settings of db.siteSettings) {
+    if (settings.faviconPath === storagePath && settings.faviconType) return settings.faviconType;
+    if (settings.appleIconPath === storagePath && settings.appleIconType) return settings.appleIconType;
+    if (settings.iconPath === storagePath && settings.iconType) return settings.iconType;
+    if (settings.ogImagePath === storagePath && settings.ogImageType) return settings.ogImageType;
+  }
+  return "image/jpeg";
+}
+
 async function readFileBytes(storagePath: string) {
   const { unpackBytes } = await import("../src/lib/data/compact");
   let bytes: Buffer | null = null;
@@ -73,7 +85,7 @@ async function readFileBytes(storagePath: string) {
 async function main() {
   const apply = process.argv.includes("--apply");
   const database = await readSource();
-  const { sourceHasRecords, snapshotDatabase, copyDatabase, storedFileMoves, rewriteStoredPaths } = await import("../src/lib/data/migrate");
+  const { sourceHasRecords, snapshotDatabase, copyDatabase, storedFileMoves } = await import("../src/lib/data/migrate");
   const { createMemoryRepository } = await import("../src/lib/data/memory");
   if (!sourceHasRecords(database)) {
     console.error("The source has no profiles, questions, or saved site settings. Nothing was written.");
@@ -91,33 +103,78 @@ async function main() {
     console.error("Supabase credentials are missing. Nothing was written.");
     process.exit(1);
   }
-  const files = new Map<string, Buffer>();
+  const files = new Map<string, { bytes: Buffer; contentType: string }>();
+  const readable = [];
   for (const move of moves) {
     const bytes = await readFileBytes(move.from);
     if (!bytes) {
-      console.error(`Could not read ${move.from}. Nothing was written to Supabase.`);
-      process.exit(1);
+      console.error(`Could not read a stored file. Its database path will stay unchanged.`);
+      continue;
     }
-    files.set(move.to, bytes);
+    files.set(move.to, { bytes, contentType: contentTypeFor(database, move.from) });
+    readable.push(move);
   }
+  const copied = structuredClone(database);
+  const moved = new Map(readable.map((move) => [move.from, move.to]));
+  for (const media of copied.mediaObjects) {
+    const nextPath = moved.get(media.storagePath);
+    if (nextPath) media.storagePath = nextPath;
+  }
+  for (const settings of copied.siteSettings) {
+    if (typeof settings.faviconPath === "string" && moved.has(settings.faviconPath)) settings.faviconPath = moved.get(settings.faviconPath) ?? settings.faviconPath;
+    if (typeof settings.appleIconPath === "string" && moved.has(settings.appleIconPath)) settings.appleIconPath = moved.get(settings.appleIconPath) ?? settings.appleIconPath;
+    if (typeof settings.iconPath === "string" && moved.has(settings.iconPath)) settings.iconPath = moved.get(settings.iconPath) ?? settings.iconPath;
+    if (typeof settings.ogImagePath === "string" && moved.has(settings.ogImagePath)) settings.ogImagePath = moved.get(settings.ogImagePath) ?? settings.ogImagePath;
+  }
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    return originalFetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  };
   const { createClient } = await import("@supabase/supabase-js");
   const { createSupabaseRepository } = await import("../src/lib/data/supabase-repo");
   const target = createSupabaseRepository();
+  for (const profile of copied.profiles) {
+    const existing = await target.find("profiles", { eq: { email: profile.email } });
+    if (!existing || existing.id === profile.id) continue;
+    await target.removeWhere("credentials", { eq: { userId: existing.id } });
+    await target.removeWhere("userPreferences", { eq: { userId: existing.id } });
+    await target.removeWhere("emailTokens", { eq: { userId: existing.id } });
+    await target.remove("profiles", existing.id);
+  }
+  const fromTable = process.argv.find((arg) => arg.startsWith("--from="))?.slice("--from=".length);
+  if (fromTable) {
+    for (const key of Object.keys(copied)) {
+      if (key === fromTable) break;
+      copied[key] = [];
+    }
+  }
+  const profileIds = new Set(database.profiles.map((profile) => profile.id));
+  const coupleIds = new Set(database.couples.map((couple) => couple.id));
+  copied.mediaObjects = copied.mediaObjects.flatMap((media) => {
+    if (!profileIds.has(media.ownerId)) return [];
+    if (media.coupleId && !coupleIds.has(media.coupleId)) media.coupleId = null;
+    return [media];
+  });
+  for (const event of copied.auditEvents) {
+    if (event.userId && !profileIds.has(event.userId)) event.userId = null;
+  }
+  console.log("Saving a rollback snapshot.");
   const before = await snapshotDatabase(target);
   const rollbackPath = path.join(process.cwd(), ".data", "migration-rollback.json");
   await mkdir(path.dirname(rollbackPath), { recursive: true });
   await writeFile(rollbackPath, JSON.stringify(before));
-  const report = await copyDatabase(createMemoryRepository(rewriteStoredPaths(database)), target);
+  const report = await copyDatabase(createMemoryRepository(copied), target);
   if (report.missing.length) {
     console.error(`Validation failed for ${report.missing.length} rows. Run npm run migrate:rollback to restore the previous database rows.`);
     process.exit(1);
   }
   const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  for (const [objectPath, bytes] of files) {
-    const upload = await client.storage.from("private-media").upload(objectPath, bytes, { upsert: true });
+  for (const [objectPath, file] of files) {
+    const upload = await client.storage.from("private-media").upload(objectPath, file.bytes, { upsert: true, contentType: file.contentType });
     if (upload.error) {
-      console.error(`File upload failed for ${objectPath}. Database rows can be restored with npm run migrate:rollback. Blob files were left in place.`);
-      process.exit(1);
+      console.error(`File upload failed for ${objectPath}: ${upload.error.message}`);
     }
   }
   console.log("Supabase now has the copied records. Blob files and couplesync/db.json were left in place.");
