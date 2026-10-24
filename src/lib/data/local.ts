@@ -84,6 +84,12 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
   }
 }
 
+/** Reads the current store without seeding or writing. Blob errors are thrown so a migration cannot treat a blocked store as an empty database. */
+export async function readStoredDatabase(): Promise<Database> {
+  if (sharedEnabled()) return (await readBlobDatabase()).db;
+  return readDatabase();
+}
+
 async function writeBlobDatabase(db: Database) {
   if (blobPaused()) throw new Error("Blob store is paused until the usage limit resets");
   try {

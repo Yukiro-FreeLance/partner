@@ -718,7 +718,12 @@ export async function siteSettingsAction(formData: FormData) {
   const themeColor = /^#[0-9a-fA-F]{6}$/.test(formString(formData, "themeColor").trim()) ? formString(formData, "themeColor").trim() : "#6d28d9";
   if (!siteName || !title || !description) redirect("/admin/settings?error=Add%20a%20site%20name%2C%20title%2C%20and%20description.");
   const repo = await getRepository();
-  await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor });
+  try {
+    await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Site settings could not be saved.";
+    redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
+  }
   for (const kind of ["favicon", "apple", "icon", "og"] as const) {
     const file = formData.get(kind);
     if (!(file instanceof File) || file.size === 0) continue;

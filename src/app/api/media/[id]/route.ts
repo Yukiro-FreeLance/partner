@@ -1,3 +1,4 @@
+import path from "path";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
 import { getRepository } from "@/lib/data";
@@ -29,7 +30,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       if (!memory || memory.visibility !== "shared") return new Response("Not found.", { status: 404 });
     }
   }
-  if (isSupabaseConfigured()) {
+  const remote = isSupabaseConfigured() && !media.storagePath.startsWith("couplesync/") && !path.isAbsolute(media.storagePath);
+  if (remote) {
     const signed = await createAdminClient().storage.from("private-media").createSignedUrl(media.storagePath, 60);
     if (signed.error || !signed.data?.signedUrl) return new Response("File unavailable.", { status: 404 });
     return Response.redirect(signed.data.signedUrl);

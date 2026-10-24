@@ -45,23 +45,57 @@ export function siteAssetUrl(kind: SiteAssetKind, version = "") {
   return version ? `${base}?v=${encodeURIComponent(version)}` : base;
 }
 
-export async function getSiteSettings() {
+const cacheMs = 60_000;
+const settingsCache = globalThis as { __couplesyncSiteSettings?: { status: "ready" | "missing"; settings: SiteSettings; at: number } };
+
+export type SiteSettingsLoad =
+  | { status: "ready" | "missing"; settings: SiteSettings }
+  | { status: "unavailable"; settings: SiteSettings };
+
+export function invalidateSiteSettings() {
+  settingsCache.__couplesyncSiteSettings = undefined;
+}
+
+export function settingsWritePlan(status: SiteSettingsLoad["status"]) {
+  if (status === "unavailable") return "refuse" as const;
+  if (status === "missing") return "insert" as const;
+  return "update" as const;
+}
+
+export async function loadSiteSettings(): Promise<SiteSettingsLoad> {
+  const cached = settingsCache.__couplesyncSiteSettings;
+  if (cached && Date.now() - cached.at < cacheMs) return cached;
   try {
     const repo = await getRepository();
     const row = await repo.find("siteSettings", { eq: { id: "default" } });
-    return { ...defaultSiteSettings, ...row, id: "default" };
+    if (!row) {
+      const missing = { status: "missing" as const, settings: { ...defaultSiteSettings }, at: Date.now() };
+      settingsCache.__couplesyncSiteSettings = missing;
+      return missing;
+    }
+    const ready = { status: "ready" as const, settings: { ...defaultSiteSettings, ...row, id: "default" }, at: Date.now() };
+    settingsCache.__couplesyncSiteSettings = ready;
+    return ready;
   } catch (error) {
     console.error("Site settings unavailable", error instanceof Error ? error.message : "unknown error");
-    return { ...defaultSiteSettings };
+    if (cached?.status === "ready") return cached;
+    return { status: "unavailable", settings: cached?.settings ?? { ...defaultSiteSettings } };
   }
 }
 
+export async function getSiteSettings() {
+  return (await loadSiteSettings()).settings;
+}
+
 export async function saveSiteSettings(patch: Partial<SiteSettings>) {
+  const loaded = await loadSiteSettings();
+  const plan = settingsWritePlan(loaded.status);
+  if (plan === "refuse") throw new Error("Site settings could not be loaded, so the saved settings were left unchanged.");
   const repo = await getRepository();
-  const current = await getSiteSettings();
-  const next = { ...current, ...patch, id: "default", updatedAt: new Date().toISOString() };
-  if (current.updatedAt) return repo.update("siteSettings", "default", next);
-  return repo.insert("siteSettings", next);
+  const next = { ...loaded.settings, ...patch, id: "default", updatedAt: new Date().toISOString() };
+  const saved = plan === "insert" ? await repo.insert("siteSettings", next) : await repo.update("siteSettings", "default", next);
+  invalidateSiteSettings();
+  return saved;
 }
 
 const imageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/x-icon", "image/vnd.microsoft.icon"]);

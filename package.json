@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "migrate:supabase": "tsx scripts/migrate-to-supabase.ts",
+    "migrate:rollback": "tsx scripts/rollback-supabase.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -1,8 +1,8 @@
 import { siteSettingsAction } from "@/app/actions";
-import { Button } from "@/components/ui/button";
+import { PendingButton } from "@/components/pending-button";
 import { Input, Label } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth/session";
-import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
+import { loadSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 
 export const metadata = { title: "Site settings" };
 
@@ -18,13 +18,15 @@ export default async function SiteSettingsPage({ searchParams }: { searchParams:
   const actor = user.actor ?? user.profile;
   if (actor.role !== "super_admin") return <main className="p-6">Site settings are limited to the super admin.</main>;
   const { saved, error } = await searchParams;
-  const settings = await getSiteSettings();
+  const loaded = await loadSiteSettings();
+  const settings = loaded.settings;
   return (
     <main className="grid gap-6">
       <div>
         <h1 className="font-serif text-4xl">Site settings</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Search title, description, theme color, favicon, Apple icon, app icon, and the image used when a link is shared.</p>
       </div>
+      {loaded.status === "unavailable" && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">Site settings could not be loaded. The saved settings were left unchanged, and this form is showing built-in defaults until the database responds.</p>}
       {saved && <p className="rounded-2xl bg-accent px-4 py-3 text-sm" role="status">Site settings saved.</p>}
       {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{error}</p>}
       <form action={siteSettingsAction} className="grid gap-6">
@@ -54,7 +56,7 @@ export default async function SiteSettingsPage({ searchParams }: { searchParams:
             })}
           </div>
         </section>
-        <Button type="submit" className="w-fit">Save site settings</Button>
+        <PendingButton disabled={loaded.status === "unavailable"} pendingLabel="Saving site settings…">Save site settings</PendingButton>
       </form>
     </main>
   );

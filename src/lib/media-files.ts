@@ -3,12 +3,22 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { BlobNotFoundError, get, put } from "@vercel/blob";
 import { blobEnabled, blobPaused, blobTokenOptions, pauseBlob } from "@/lib/blob-auth";
+import { isSupabaseConfigured } from "@/lib/config";
 import { packBytes, unpackBytes } from "@/lib/data/compact";
 import { dataDir } from "@/lib/data/paths";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+const bucket = "private-media";
 
 const blobPrefix = "couplesync/uploads/";
 
 export async function storeManagedBytes(pathname: string, bytes: Buffer, contentType: string) {
+  if (isSupabaseConfigured()) {
+    const key = pathname.replace(/^couplesync\//, "");
+    const upload = await createAdminClient().storage.from(bucket).upload(key, bytes, { contentType, upsert: true });
+    if (upload.error) throw new Error(upload.error.message);
+    return key;
+  }
   const packed = packBytes(bytes);
   const storedPath = packed.compressed ? `${pathname}.gz` : pathname;
   if (blobEnabled()) {
@@ -36,6 +46,11 @@ export async function storeManagedBytes(pathname: string, bytes: Buffer, content
 }
 
 export async function readManagedFile(storagePath: string) {
+  if (isSupabaseConfigured() && !storagePath.startsWith("couplesync/") && !path.isAbsolute(storagePath)) {
+    const downloaded = await createAdminClient().storage.from(bucket).download(storagePath);
+    if (downloaded.error || !downloaded.data) return null;
+    return Buffer.from(await downloaded.data.arrayBuffer());
+  }
   const bytes = storagePath.startsWith("couplesync/") ? await readBlob(storagePath) : await readLocal(storagePath);
   if (!bytes) return null;
   return storagePath.endsWith(".gz") ? unpackBytes(bytes) : bytes;

@@ -8,8 +8,7 @@ import { ensureOperator } from "@/lib/demo/seed";
 const staff = globalThis as { __couplesyncStaffReady?: Promise<void> };
 
 export async function getRepository(): Promise<Repository> {
-  if (isSupabaseConfigured()) return createSupabaseRepository();
-  const repo = await getLocalRepository();
+  const repo = isSupabaseConfigured() ? createSupabaseRepository() : await getLocalRepository();
   staff.__couplesyncStaffReady ??= ensureOperator(repo).then(
     () => undefined,
     (error) => {
