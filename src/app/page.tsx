@@ -6,19 +6,25 @@ import { PreviewQuiz } from "@/components/preview-quiz";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: { absolute: "CoupleSync — How Well Do You Really Know Your Person?" },
-  description: "Discover their little favorites, hidden dreams, personality, and the things that make your connection uniquely yours. A private quiz for two.",
-  alternates: { canonical: "/" },
-  openGraph: {
-    title: "CoupleSync — How Well Do You Really Know Your Person?",
-    description: "A private way for two people to learn the small things that make their connection theirs.",
-    url: "/",
-    siteName: "CoupleSync",
-    type: "website",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings();
+  return {
+    title: { absolute: settings.title },
+    description: settings.description,
+    keywords: settings.keywords.split(",").map((item) => item.trim()).filter(Boolean),
+    alternates: { canonical: "/" },
+    openGraph: {
+      title: settings.ogTitle || settings.title,
+      description: settings.ogDescription || settings.description,
+      url: "/",
+      siteName: settings.siteName,
+      type: "website",
+      images: settings.ogImagePath ? [siteAssetUrl("og")] : undefined,
+    },
+  };
+}
 
 const features = [
   {

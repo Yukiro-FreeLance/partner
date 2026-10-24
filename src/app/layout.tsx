@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Montserrat, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
+import { siteUrl } from "@/lib/config";
+import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 import "./globals.css";
 
 const poppins = Poppins({ variable: "--font-poppins", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
@@ -13,22 +15,44 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
-  title: { default: "CoupleSync — How well do you really know your person?", template: "%s · CoupleSync" },
-  description: "Discover their little favorites, hidden dreams, personality, and the things that make your connection uniquely yours.",
-  applicationName: "CoupleSync",
-  openGraph: { title: "CoupleSync", description: "A private way for two people to learn each other.", type: "website" },
-  twitter: { card: "summary_large_image", title: "CoupleSync", description: "How well do you really know your person?" },
-  appleWebApp: { capable: true, title: "CoupleSync", statusBarStyle: "default" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings();
+  const keywords = settings.keywords.split(",").map((item) => item.trim()).filter(Boolean);
+  const icon = settings.faviconPath ? [{ url: siteAssetUrl("favicon"), type: settings.faviconType ?? "image/png" }] : [{ url: "/brand/logo.jpg", type: "image/jpeg" }];
+  const apple = settings.appleIconPath ? [{ url: siteAssetUrl("apple"), type: settings.appleIconType ?? "image/png" }] : icon;
+  return {
+    metadataBase: new URL(siteUrl()),
+    title: { default: settings.title, template: `%s · ${settings.siteName}` },
+    description: settings.description,
+    applicationName: settings.siteName,
+    keywords,
+    icons: { icon, apple, shortcut: icon },
+    openGraph: {
+      title: settings.ogTitle || settings.title,
+      description: settings.ogDescription || settings.description,
+      siteName: settings.siteName,
+      type: "website",
+      images: settings.ogImagePath ? [siteAssetUrl("og")] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: settings.ogTitle || settings.title,
+      description: settings.ogDescription || settings.description,
+      images: settings.ogImagePath ? [siteAssetUrl("og")] : undefined,
+    },
+    appleWebApp: { capable: true, title: settings.siteName, statusBarStyle: "default" },
+  };
+}
 
-export const viewport: Viewport = {
-  themeColor: "#6d28d9",
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-};
+export async function generateViewport(): Promise<Viewport> {
+  const settings = await getSiteSettings();
+  return {
+    themeColor: settings.themeColor || "#6d28d9",
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const store = await cookies();

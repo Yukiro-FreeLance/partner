@@ -1,14 +1,18 @@
 import type { MetadataRoute } from "next";
+import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const settings = await getSiteSettings();
+  const icon = settings.iconPath ? siteAssetUrl("icon") : settings.faviconPath ? siteAssetUrl("favicon") : "/brand/logo.jpg";
+  const type = settings.iconType || settings.faviconType || "image/jpeg";
   return {
-    name: "CoupleSync",
-    short_name: "CoupleSync",
-    description: "A private way for two people to learn each other.",
+    name: settings.siteName,
+    short_name: settings.siteName,
+    description: settings.description,
     start_url: "/home",
     display: "standalone",
     background_color: "#f6f3fb",
-    theme_color: "#6d28d9",
-    icons: [{ src: "/brand/logo.jpg", sizes: "512x512", type: "image/jpeg" }],
+    theme_color: settings.themeColor || "#6d28d9",
+    icons: [{ src: icon, sizes: "512x512", type }],
   };
 }

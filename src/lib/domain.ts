@@ -504,6 +504,28 @@ export type SupportMessage = {
   createdAt: string;
 };
 
+export type SiteAssetKind = "favicon" | "apple" | "icon" | "og";
+
+export type SiteSettings = {
+  id: string;
+  siteName: string;
+  title: string;
+  description: string;
+  ogTitle: string;
+  ogDescription: string;
+  keywords: string;
+  themeColor: string;
+  faviconPath: string | null;
+  faviconType: string | null;
+  appleIconPath: string | null;
+  appleIconType: string | null;
+  iconPath: string | null;
+  iconType: string | null;
+  ogImagePath: string | null;
+  ogImageType: string | null;
+  updatedAt: string;
+};
+
 export type MediaObject = {
   id: string;
   ownerId: string;
@@ -558,6 +580,7 @@ export type Database = {
   loginAttempts: LoginAttempt[];
   supportMessages: SupportMessage[];
   mediaObjects: MediaObject[];
+  siteSettings: SiteSettings[];
 };
 
 export type TableName = keyof Database;

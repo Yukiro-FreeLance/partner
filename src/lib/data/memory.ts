@@ -45,6 +45,7 @@ export function emptyDatabase(): Database {
     loginAttempts: [],
     supportMessages: [],
     mediaObjects: [],
+    siteSettings: [],
   };
 }
 

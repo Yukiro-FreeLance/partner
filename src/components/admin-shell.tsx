@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Flag, House, LayoutDashboard, LifeBuoy, ListChecks, LogOut, Menu, Users, X } from "lucide-react";
+import { Flag, House, LayoutDashboard, LifeBuoy, ListChecks, LogOut, Menu, Settings, Users, X } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ export function AdminShell({ children, name, superAdmin }: { children: React.Rea
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const links = superAdmin
-    ? [baseLinks[0], baseLinks[1], { href: "/admin/users", label: "Users", icon: Users }, ...baseLinks.slice(2)]
+    ? [baseLinks[0], baseLinks[1], { href: "/admin/users", label: "Users", icon: Users }, { href: "/admin/settings", label: "Site settings", icon: Settings }, ...baseLinks.slice(2)]
     : baseLinks;
 
   useEffect(() => {

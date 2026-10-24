@@ -16,6 +16,7 @@ import { acceptInvitation, createCouple, createInvitation, leaveCouple, regenera
 import { completeQuiz, getOrCreateDaily, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { writeAudit } from "@/lib/services/access";
+import { saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
 import { addReflection, adminStats, blockUser, createCustomCard, createCustomQuestion, createMemory, deleteAccount, deleteMemory, fileReport, markSimilarity, reviewReport, saveAdminQuestion, saveCardState, updateMemory } from "@/lib/services/life";
 import type { AnswerPayload, QuizMode } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
@@ -673,6 +674,32 @@ export async function adminReportAction(formData: FormData) {
   const status = formString(formData, "status") === "dismissed" ? "dismissed" : "reviewed";
   await reviewReport(repo, formString(formData, "reportId"), status, formData.get("disable") === "on");
   revalidatePath("/admin/reports");
+}
+
+export async function siteSettingsAction(formData: FormData) {
+  const user = await requireUser();
+  const actor = user.actor ?? user.profile;
+  if (actor.role !== "super_admin") redirect("/home");
+  const siteName = formString(formData, "siteName").trim().slice(0, 40);
+  const title = formString(formData, "title").trim().slice(0, 140);
+  const description = formString(formData, "description").trim().slice(0, 300);
+  const ogTitle = formString(formData, "ogTitle").trim().slice(0, 140);
+  const ogDescription = formString(formData, "ogDescription").trim().slice(0, 300);
+  const keywords = formString(formData, "keywords").trim().slice(0, 240);
+  const themeColor = /^#[0-9a-fA-F]{6}$/.test(formString(formData, "themeColor").trim()) ? formString(formData, "themeColor").trim() : "#6d28d9";
+  if (!siteName || !title || !description) redirect("/admin/settings?error=Add%20a%20site%20name%2C%20title%2C%20and%20description.");
+  const repo = await getRepository();
+  await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor });
+  for (const kind of ["favicon", "apple", "icon", "og"] as const) {
+    const file = formData.get(kind);
+    if (!(file instanceof File) || file.size === 0) continue;
+    const saved = await storeSiteAsset(kind, file);
+    if (!saved.ok) redirect(`/admin/settings?error=${encodeURIComponent(saved.error)}`);
+  }
+  await writeAudit(repo, actor.id, "site.settings");
+  revalidatePath("/", "layout");
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?saved=1");
 }
 
 export async function loadAdminStats() {
