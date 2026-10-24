@@ -1,0 +1,13 @@
+import { Article } from "@/components/site";
+
+export const metadata = { title: "Support" };
+
+export default function SupportPage() {
+  return (
+    <Article title="Support">
+      <p>If a quiz will not resume, open Play and choose the in-progress round. If an invitation expired, the person who created the couple can make a new one.</p>
+      <p>Email verification in local development shows a one-time link on screen because no mail provider is configured. In production, set Supabase email or your own provider.</p>
+      <p>To report a question or a person, use Settings. Reports do not include private answer text.</p>
+    </Article>
+  );
+}

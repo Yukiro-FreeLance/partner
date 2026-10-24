@@ -1,0 +1,224 @@
+import "server-only";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { jwtVerify, SignJWT } from "jose";
+import { isAdminEmail, isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
+import { getRepository } from "@/lib/data";
+import type { Profile, UserPreferences } from "@/lib/domain";
+import { createClient } from "@/lib/supabase/server";
+
+export const SESSION_COOKIE = "cs_session";
+export const IMPERSONATION_COOKIE = "cs_impersonate";
+export const PAIR_COOKIE = "cs_pair";
+
+export function safePairPath(value: string | null | undefined) {
+  if (!value) return null;
+  let path = value.trim();
+  if (!path || path.length > 200) return null;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    try {
+      path = new URL(path).pathname;
+    } catch {
+      return null;
+    }
+  }
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.includes("\0")) return null;
+  const pathname = path.split("?")[0]?.split("#")[0] ?? "";
+  if (pathname === "/join" || pathname === "/pairing" || pathname.startsWith("/invite/")) return pathname;
+  return null;
+}
+
+export async function rememberPairPath(value: string | null | undefined) {
+  const safe = safePairPath(value);
+  if (!safe) return;
+  (await cookies()).set(PAIR_COOKIE, safe, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 30,
+  });
+}
+
+export async function consumePairPath() {
+  const store = await cookies();
+  const safe = safePairPath(store.get(PAIR_COOKIE)?.value);
+  if (store.get(PAIR_COOKIE)) store.delete(PAIR_COOKIE);
+  return safe;
+}
+
+export function isStaffRole(role: Profile["role"]) {
+  return role === "admin" || role === "super_admin";
+}
+
+function secret() {
+  const value = process.env.AUTH_SECRET;
+  if (value) return new TextEncoder().encode(value);
+  if (process.env.NODE_ENV === "production" && !isSupabaseConfigured()) {
+    throw new Error("AUTH_SECRET is required in production when Supabase Auth is not configured.");
+  }
+  return new TextEncoder().encode("couplesync-dev-secret-not-for-production");
+}
+
+export async function signSession(userId: string) {
+  return new SignJWT({ sub: userId }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("14d").sign(secret());
+}
+
+export async function readSessionUserId() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSessionCookie(userId: string) {
+  const store = await cookies();
+  store.set(SESSION_COOKIE, await signSession(userId), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 14,
+  });
+}
+
+export async function clearSessionCookie() {
+  const store = await cookies();
+  store.delete(SESSION_COOKIE);
+  store.delete(IMPERSONATION_COOKIE);
+}
+
+export function impersonationCookieOptions(maxAge = 60 * 60 * 8) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  };
+}
+
+export async function signImpersonation(targetId: string, actorId: string) {
+  return new SignJWT({ sub: targetId, act: actorId }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("8h").sign(secret());
+}
+
+export async function setImpersonationCookie(targetId: string, actorId: string) {
+  const token = await signImpersonation(targetId, actorId);
+  (await cookies()).set(IMPERSONATION_COOKIE, token, impersonationCookieOptions());
+}
+
+export async function clearImpersonationCookie() {
+  (await cookies()).delete(IMPERSONATION_COOKIE);
+}
+
+export type CurrentUser = { profile: Profile; preferences: UserPreferences; actor: Profile | null };
+
+function roleFor(email: string): Profile["role"] {
+  if (isSuperAdminEmail(email)) return "super_admin";
+  if (isAdminEmail(email)) return "admin";
+  return "user";
+}
+
+async function syncAdmin(profile: Profile) {
+  const role = profile.isDemo ? "user" : roleFor(profile.email);
+  if (role === profile.role) return profile;
+  const repo = await getRepository();
+  return repo.update("profiles", profile.id, { role, updatedAt: new Date().toISOString() });
+}
+
+async function impersonatedUser(real: Profile) {
+  if (real.role !== "super_admin") return null;
+  const token = (await cookies()).get(IMPERSONATION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.act !== real.id || typeof payload.sub !== "string" || payload.sub === real.id) return null;
+    const repo = await getRepository();
+    const target = await repo.find("profiles", { eq: { id: payload.sub } });
+    if (!target || target.role === "super_admin") return null;
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return null;
+    const repo = await getRepository();
+    let profile = await repo.find("profiles", { eq: { id: data.user.id } });
+    if (!profile) {
+      const stamp = new Date().toISOString();
+      profile = await repo.insert("profiles", {
+        id: data.user.id,
+        email: data.user.email ?? "",
+        displayName: String(data.user.user_metadata?.display_name ?? data.user.email?.split("@")[0] ?? "Partner"),
+        avatarUrl: null,
+        bannerUrl: null,
+        relationshipStatus: null,
+        relationshipStartedOn: null,
+        interests: [],
+        preferredCategories: [],
+        role: "user",
+        isDemo: false,
+        emailVerified: Boolean(data.user.email_confirmed_at),
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+      await repo.insert("userPreferences", defaultPreferences(profile.id));
+    }
+    profile = await syncAdmin(profile);
+    const target = await impersonatedUser(profile);
+    const effective = target ?? profile;
+    const preferences = await preferencesFor(repo, effective.id);
+    return { profile: effective, preferences, actor: target ? profile : null };
+  }
+
+  const userId = await readSessionUserId();
+  if (!userId) return null;
+  const repo = await getRepository();
+  const profile = await repo.find("profiles", { eq: { id: userId } });
+  if (!profile) return null;
+  const synced = await syncAdmin(profile);
+  const target = await impersonatedUser(synced);
+  const effective = target ?? synced;
+  const preferences = await preferencesFor(repo, effective.id);
+  return { profile: effective, preferences, actor: target ? synced : null };
+}
+
+async function preferencesFor(repo: Awaited<ReturnType<typeof getRepository>>, userId: string) {
+  const existing = await repo.find("userPreferences", { eq: { userId } });
+  if (existing) return existing;
+  return repo.insert("userPreferences", defaultPreferences(userId));
+}
+
+export function defaultPreferences(userId: string): UserPreferences {
+  return {
+    userId,
+    theme: "light",
+    locale: "en",
+    emailNotifications: false,
+    inAppNotifications: true,
+    reminderHour: null,
+    streakPaused: false,
+    reducedMotion: false,
+    dailyStreak: 0,
+    lastDailyOn: null,
+    points: 0,
+    recentCardIds: [],
+    onboardingStep: "profile",
+    onboardingCompleted: false,
+  };
+}
+
+export async function requireUser() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  return user;
+}
