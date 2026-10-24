@@ -6,14 +6,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "6mb",
     },
   },
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
   async rewrites() {
     return [{ source: "/favicon.ico", destination: "/site-asset/favicon" }];
   },
