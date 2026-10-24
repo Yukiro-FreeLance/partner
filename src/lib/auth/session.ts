@@ -60,24 +60,31 @@ function secret() {
   return new TextEncoder().encode("couplesync-dev-secret-not-for-production");
 }
 
-export async function signSession(userId: string) {
-  return new SignJWT({ sub: userId }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("14d").sign(secret());
+export async function signSession(userId: string, email = "") {
+  return new SignJWT({ sub: userId, email }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("14d").sign(secret());
 }
 
-export async function readSessionUserId() {
+export async function readSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string") return null;
+    return { userId: payload.sub, email: typeof payload.email === "string" ? payload.email.toLowerCase() : "" };
   } catch {
     return null;
   }
 }
 
+export async function readSessionUserId() {
+  return (await readSession())?.userId ?? null;
+}
+
 export async function setSessionCookie(userId: string) {
+  const repo = await getRepository();
+  const profile = await repo.find("profiles", { eq: { id: userId } });
   const store = await cookies();
-  store.set(SESSION_COOKIE, await signSession(userId), {
+  store.set(SESSION_COOKIE, await signSession(userId, profile?.email ?? ""), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -146,6 +153,28 @@ async function impersonatedUser(real: Profile) {
   }
 }
 
+async function restoreSessionProfile(repo: Awaited<ReturnType<typeof getRepository>>, userId: string, email: string) {
+  const stamp = new Date().toISOString();
+  const profile = await repo.insert("profiles", {
+    id: userId,
+    email,
+    displayName: email.split("@")[0] || "Partner",
+    avatarUrl: null,
+    bannerUrl: null,
+    relationshipStatus: null,
+    relationshipStartedOn: null,
+    interests: [],
+    preferredCategories: [],
+    role: email.endsWith("@demo.couplesync.local") ? "user" : roleFor(email),
+    isDemo: email.endsWith("@demo.couplesync.local"),
+    emailVerified: true,
+    createdAt: stamp,
+    updatedAt: stamp,
+  });
+  await repo.insert("userPreferences", defaultPreferences(userId));
+  return profile;
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
@@ -180,10 +209,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     return { profile: effective, preferences, actor: target ? profile : null };
   }
 
-  const userId = await readSessionUserId();
-  if (!userId) return null;
+  const session = await readSession();
+  if (!session) return null;
   const repo = await getRepository();
-  const profile = await repo.find("profiles", { eq: { id: userId } });
+  let profile = await repo.find("profiles", { eq: { id: session.userId } });
+  if (!profile && session.email) profile = await repo.find("profiles", { eq: { email: session.email } });
+  if (!profile && session.email) profile = await restoreSessionProfile(repo, session.userId, session.email);
   if (!profile) return null;
   const synced = await syncAdmin(profile);
   const target = await impersonatedUser(synced);

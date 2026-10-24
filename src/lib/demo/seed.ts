@@ -3,7 +3,7 @@ import { superAdminEmails } from "@/lib/config";
 import type { UserPreferences } from "@/lib/domain";
 import type { Repository } from "@/lib/data/repository";
 import { achievements, categories, challenges, conversationCards, personalityQuestions, personalityTests, questionOptions, questions, quizTemplates } from "@/lib/content/catalog";
-import { createId } from "@/lib/ids";
+import { createId, stableId } from "@/lib/ids";
 import { acceptInvitation, createCouple } from "@/lib/services/couples";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { completeQuiz, saveQuizProgress, startQuiz } from "@/lib/services/quiz";
@@ -84,8 +84,8 @@ export async function ensureDemo(repo: Repository) {
   if (await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } })) return;
   const stamp = new Date().toISOString();
   const passwordHash = await demoPasswordHash();
-  const mayaId = createId();
-  const jordanId = createId();
+  const mayaId = stableId(DEMO_MAYA_EMAIL);
+  const jordanId = stableId(DEMO_JORDAN_EMAIL);
   await repo.insert("profiles", {
     id: mayaId,
     email: DEMO_MAYA_EMAIL,
@@ -223,7 +223,7 @@ export async function ensureOperator(repo: Repository) {
       continue;
     }
     if (password.length < 8) continue;
-    const userId = createId();
+    const userId = stableId(email);
     await repo.insert("profiles", {
       id: userId,
       email,
