@@ -17,6 +17,8 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       AUTH_SECRET: "e2e-auth-secret-not-for-production",
+      RESEND_API_KEY: "disabled",
+      EMAIL_FROM: "",
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

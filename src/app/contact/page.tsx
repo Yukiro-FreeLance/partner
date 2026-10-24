@@ -6,7 +6,7 @@ export const metadata = { title: "Contact" };
 export default function ContactPage() {
   return (
     <Article title="Contact">
-      <p>Send a note about the product. If email delivery is not configured, the message is stored for the platform owner and is not a couple answer.</p>
+      <p>Send a note about the product. The message is stored for the platform owner. When CONTACT_EMAIL is set, a copy is emailed there. It is not a couple answer.</p>
       <ContactForm />
     </Article>
   );
