@@ -145,9 +145,9 @@ async function main() {
   }
   const fromTable = process.argv.find((arg) => arg.startsWith("--from="))?.slice("--from=".length);
   if (fromTable) {
-    for (const key of Object.keys(copied)) {
+    for (const key of Object.keys(copied) as (keyof Database)[]) {
       if (key === fromTable) break;
-      copied[key] = [];
+      copied[key] = [] as Database[typeof key];
     }
   }
   const profileIds = new Set(database.profiles.map((profile) => profile.id));
