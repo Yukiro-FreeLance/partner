@@ -3,13 +3,17 @@ import { isSupabaseConfigured } from "@/lib/config";
 import { getLocalRepository } from "@/lib/data/local";
 import type { Repository } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-store";
-import { ensureOperator } from "@/lib/demo/seed";
+import { ensureContent, ensureOperator } from "@/lib/demo/seed";
 
 const staff = globalThis as { __couplesyncStaffReady?: Promise<void> };
 
 export async function getRepository(): Promise<Repository> {
   const repo = isSupabaseConfigured() ? createSupabaseRepository() : await getLocalRepository();
-  staff.__couplesyncStaffReady ??= ensureOperator(repo).then(
+  staff.__couplesyncStaffReady ??= (async () => {
+    const sample = await repo.list("questions", {}, { limit: 1 });
+    if (sample.length === 0) await ensureContent(repo);
+    await ensureOperator(repo);
+  })().then(
     () => undefined,
     (error) => {
       staff.__couplesyncStaffReady = undefined;

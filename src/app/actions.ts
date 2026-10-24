@@ -9,7 +9,6 @@ import { getRepository } from "@/lib/data";
 import { runWrite } from "@/lib/data/repository";
 import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, resendVerification, resetPassword, verifyEmailToken } from "@/lib/auth/accounts";
 import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
 import { contactSchema, coupleSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
@@ -23,6 +22,12 @@ import type { AnswerPayload, QuizMode } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
 
 export type FormState = { error?: string; message?: string; link?: string };
+
+function isNextControlFlow(error: unknown) {
+  if (!error || typeof error !== "object" || !("digest" in error)) return false;
+  const digest = String((error as { digest?: unknown }).digest);
+  return digest.startsWith("NEXT_REDIRECT") || digest.startsWith("NEXT_HTTP_ERROR_FALLBACK");
+}
 
 function formString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -48,18 +53,14 @@ export async function registerAction(_state: FormState, formData: FormData): Pro
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   await rememberPairPath(formString(formData, "next"));
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.signUp({
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: { data: { display_name: parsed.data.displayName }, emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback` },
-    });
-    if (error) return { error: error.message };
-    return { message: "Check your email to verify your account. If email confirmation is turned off in Supabase, you can sign in now." };
+  let created: Awaited<ReturnType<typeof registerAccount>>;
+  try {
+    const repo = await getRepository();
+    created = await registerAccount(repo, parsed.data);
+  } catch (error) {
+    console.error("Registration failed", error instanceof Error ? error.message : "unknown error");
+    return { error: "The account store could not be reached, so the account was not created." };
   }
-  const repo = await getRepository();
-  const created = await registerAccount(repo, parsed.data);
   if (!created.ok) return { error: created.error };
   return mailedOrLocal({
     to: created.data.email,
@@ -74,18 +75,18 @@ export async function registerAction(_state: FormState, formData: FormData): Pro
 export async function loginAction(_state: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({ email: formString(formData, "email"), password: formString(formData, "password") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword(parsed.data);
-    if (error) return { error: error.message };
-    redirect(safePairPath(formString(formData, "next")) ?? (await consumePairPath()) ?? "/home");
+  try {
+    const repo = await getRepository();
+    const loggedIn = await loginAccount(repo, parsed.data.email, parsed.data.password);
+    if (!loggedIn.ok) return { error: loggedIn.error };
+    await setSessionCookie(loggedIn.data.id);
+    const next = safePairPath(formString(formData, "next")) ?? (await consumePairPath());
+    redirect(next ?? (await destination(loggedIn.data.id)));
+  } catch (error) {
+    if (isNextControlFlow(error)) throw error;
+    console.error("Sign in failed", error instanceof Error ? error.message : "unknown error");
+    return { error: "Sign-in could not reach the account store. Nothing was changed. Try again in a few minutes." };
   }
-  const repo = await getRepository();
-  const loggedIn = await loginAccount(repo, parsed.data.email, parsed.data.password);
-  if (!loggedIn.ok) return { error: loggedIn.error };
-  await setSessionCookie(loggedIn.data.id);
-  const next = safePairPath(formString(formData, "next")) ?? (await consumePairPath());
-  redirect(next ?? (await destination(loggedIn.data.id)));
 }
 
 async function destination(userId: string) {
@@ -110,19 +111,12 @@ export async function demoAction(formData: FormData) {
   const email = who === "maya" ? DEMO_MAYA_EMAIL : DEMO_JORDAN_EMAIL;
   const profile = await repo.find("profiles", { eq: { email, isDemo: true } });
   if (!profile) return;
-  if (isSupabaseConfigured()) return;
   await setSessionCookie(profile.id);
   redirect("/home");
 }
 
 export async function forgotAction(_state: FormState, formData: FormData): Promise<FormState> {
   const email = formString(formData, "email").trim();
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/reset-password` });
-    if (error) return { error: error.message };
-    return { message: "If that email can receive mail, a reset link is on its way." };
-  }
   const repo = await getRepository();
   const result = await requestPasswordReset(repo, email);
   if (!result.ok) return { error: result.error };
@@ -140,12 +134,6 @@ export async function forgotAction(_state: FormState, formData: FormData): Promi
 export async function resetAction(_state: FormState, formData: FormData): Promise<FormState> {
   const parsed = resetSchema.safeParse({ password: formString(formData, "password"), confirmPassword: formString(formData, "confirmPassword") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the password." };
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
-    if (error) return { error: error.message };
-    redirect("/home");
-  }
   const repo = await getRepository();
   const result = await resetPassword(repo, formString(formData, "token"), parsed.data.password);
   if (!result.ok) return { error: result.error };
@@ -608,42 +596,6 @@ export async function createMemberAction(formData: FormData) {
         ? "Use at least 8 characters, with a letter and a number."
         : null;
   if (problem) redirect(`/admin/users?error=${encodeURIComponent(problem)}`);
-  if (isSupabaseConfigured()) {
-    const admin = createAdminClient();
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { display_name: displayName },
-    });
-    if (error || !data.user) redirect(`/admin/users?error=${encodeURIComponent(error?.message ?? "The account could not be created.")}`);
-    const repo = await getRepository();
-    const existing = await repo.find("profiles", { eq: { id: data.user.id } });
-    if (existing) await repo.update("profiles", existing.id, { role, isDemo: false, emailVerified: true, updatedAt: new Date().toISOString() });
-    else {
-      const stamp = new Date().toISOString();
-      await repo.insert("profiles", {
-        id: data.user.id,
-        email,
-        displayName,
-        avatarUrl: null,
-        bannerUrl: null,
-        relationshipStatus: null,
-        relationshipStartedOn: null,
-        interests: [],
-        preferredCategories: [],
-        role,
-        isDemo: false,
-        emailVerified: true,
-        createdAt: stamp,
-        updatedAt: stamp,
-      });
-      await repo.insert("userPreferences", defaultPreferences(data.user.id));
-    }
-    await writeAudit(repo, actor.id, `create user ${data.user.id}`);
-    revalidatePath("/admin/users");
-    redirect("/admin/users?created=1");
-  }
   const repo = await getRepository();
   const created = await provisionAccount(repo, { displayName, email, password, role });
   if (!created.ok) redirect(`/admin/users?error=${encodeURIComponent(created.error)}`);

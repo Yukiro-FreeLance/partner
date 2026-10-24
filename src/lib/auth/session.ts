@@ -211,6 +211,19 @@ async function restoreSessionProfile(repo: Awaited<ReturnType<typeof getReposito
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const session = await readSession();
+  if (session) {
+    const repo = await getRepository();
+    let profile = await repo.find("profiles", { eq: { id: session.userId } });
+    if (!profile && session.email) profile = await repo.find("profiles", { eq: { email: session.email } });
+    if (!profile && session.email) profile = await restoreSessionProfile(repo, session.userId, session.email);
+    if (!profile) return null;
+    const synced = await syncAdmin(profile);
+    const target = await impersonatedUser(synced);
+    const effective = target ?? synced;
+    const preferences = await preferencesFor(repo, effective.id);
+    return { profile: effective, preferences, actor: target ? synced : null };
+  }
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
@@ -243,19 +256,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     const preferences = await preferencesFor(repo, effective.id);
     return { profile: effective, preferences, actor: target ? profile : null };
   }
-
-  const session = await readSession();
-  if (!session) return null;
-  const repo = await getRepository();
-  let profile = await repo.find("profiles", { eq: { id: session.userId } });
-  if (!profile && session.email) profile = await repo.find("profiles", { eq: { email: session.email } });
-  if (!profile && session.email) profile = await restoreSessionProfile(repo, session.userId, session.email);
-  if (!profile) return null;
-  const synced = await syncAdmin(profile);
-  const target = await impersonatedUser(synced);
-  const effective = target ?? synced;
-  const preferences = await preferencesFor(repo, effective.id);
-  return { profile: effective, preferences, actor: target ? synced : null };
+  return null;
 }
 
 async function preferencesFor(repo: Awaited<ReturnType<typeof getRepository>>, userId: string) {

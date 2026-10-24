@@ -10,8 +10,9 @@ function isProtected(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  let response = NextResponse.next({ request });
+  let supabaseUser = false;
   if (supabaseUrl() && supabaseAnonKey()) {
-    let response = NextResponse.next({ request });
     const supabase = createServerClient(supabaseUrl(), supabaseAnonKey(), {
       cookies: {
         getAll() {
@@ -25,23 +26,17 @@ export async function proxy(request: NextRequest) {
       },
     });
     const { data } = await supabase.auth.getUser();
-    if (isProtected(pathname) && !data.user) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      url.searchParams.set("next", pathname);
-      return NextResponse.redirect(url);
-    }
-    return response;
+    supabaseUser = Boolean(data.user);
   }
 
-  const hasSession = Boolean(request.cookies.get("cs_session")?.value);
+  const hasSession = supabaseUser || Boolean(request.cookies.get("cs_session")?.value);
   if (isProtected(pathname) && !hasSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
