@@ -1,9 +1,9 @@
 import "server-only";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import path from "path";
 import type { SiteAssetKind, SiteSettings } from "@/lib/domain";
-import { dataDir } from "@/lib/data/paths";
 import { getRepository } from "@/lib/data";
+import { readManagedFile, storeManagedBytes } from "@/lib/media-files";
 
 export const defaultSiteSettings: SiteSettings = {
   id: "default",
@@ -83,13 +83,10 @@ export async function storeSiteAsset(kind: SiteAssetKind, file: File) {
   if (!contentType) return { ok: false as const, error: "Use a PNG, JPEG, WEBP, GIF, or ICO image." };
   const limit = kind === "og" ? 5_000_000 : 2_000_000;
   if (file.size > limit) return { ok: false as const, error: "That image is too large." };
-  const extension = contentType === "image/jpeg" ? ".jpg" : contentType === "image/webp" ? ".webp" : contentType === "image/gif" ? ".gif" : contentType.includes("icon") ? ".ico" : ".png";
-  const storagePath = path.join(dataDir(), "site", `${kind}${extension}`);
   const bytes = Buffer.from(await file.arrayBuffer());
-  await mkdir(path.dirname(storagePath), { recursive: true });
-  await writeFile(storagePath, bytes);
+  const storagePath = await storeManagedBytes(`couplesync/site/${kind}`, bytes, contentType);
   const fields = assetFields[kind];
-  await saveSiteSettings({ [fields.path]: storagePath, [fields.type]: contentType, [fields.data]: bytes.toString("base64") });
+  await saveSiteSettings({ [fields.path]: storagePath, [fields.type]: contentType, [fields.data]: null });
   return { ok: true as const };
 }
 
@@ -101,15 +98,8 @@ export async function loadSiteAsset(kind: SiteAssetKind) {
   if (typeof encoded === "string" && encoded) return { bytes: Buffer.from(encoded, "base64"), type };
   const stored = settings[fields.path];
   if (typeof stored === "string" && stored) {
-    const root = path.resolve(dataDir(), "site");
-    const resolved = path.resolve(stored);
-    if (resolved.startsWith(root)) {
-      try {
-        return { bytes: await readFile(resolved), type };
-      } catch {
-        // The file is on another server. Fall through to the built-in logo.
-      }
-    }
+    const bytes = await readManagedFile(stored);
+    if (bytes) return { bytes, type };
   }
   return { bytes: await readFile(path.join(process.cwd(), "public", "brand", "logo.jpg")), type: "image/jpeg" };
 }

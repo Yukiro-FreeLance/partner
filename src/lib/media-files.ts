@@ -2,48 +2,65 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { BlobNotFoundError, get, put } from "@vercel/blob";
-import { blobTokenOptions } from "@/lib/blob-auth";
+import { blobEnabled, blobTokenOptions } from "@/lib/blob-auth";
+import { packBytes, unpackBytes } from "@/lib/data/compact";
 import { dataDir } from "@/lib/data/paths";
 
 const blobPrefix = "couplesync/uploads/";
 
-function sharedFiles() {
-  return Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
-}
-
-export async function storeMediaFile(id: string, bytes: Buffer, contentType: string, fileName: string) {
-  if (sharedFiles()) {
-    const pathname = `${blobPrefix}${id}`;
-    await put(pathname, bytes, {
+export async function storeManagedBytes(pathname: string, bytes: Buffer, contentType: string) {
+  const packed = packBytes(bytes);
+  const storedPath = packed.compressed ? `${pathname}.gz` : pathname;
+  if (blobEnabled()) {
+    await put(storedPath, packed.body, {
       access: "private",
       addRandomSuffix: false,
       allowOverwrite: true,
-      contentType,
+      contentType: packed.compressed ? "application/gzip" : contentType,
       cacheControlMaxAge: 60,
       ...blobTokenOptions(),
     });
-    return pathname;
+    return storedPath;
   }
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 80) || "upload";
-  const storagePath = path.join(dataDir(), "uploads", `${id}-${safe}`);
-  await mkdir(path.dirname(storagePath), { recursive: true });
-  await writeFile(storagePath, bytes);
-  return storagePath;
+  const relative = storedPath.replace(/^couplesync\//, "");
+  const full = path.join(dataDir(), relative);
+  await mkdir(path.dirname(full), { recursive: true });
+  await writeFile(full, packed.body);
+  return full;
+}
+
+export async function readManagedFile(storagePath: string) {
+  const bytes = storagePath.startsWith("couplesync/") ? await readBlob(storagePath) : await readLocal(storagePath);
+  if (!bytes) return null;
+  return storagePath.endsWith(".gz") ? unpackBytes(bytes) : bytes;
+}
+
+export async function storeMediaFile(id: string, bytes: Buffer, contentType: string, _fileName: string) {
+  return storeManagedBytes(`${blobPrefix}${id}`, bytes, contentType);
 }
 
 export async function readMediaFile(storagePath: string) {
-  if (storagePath.startsWith(blobPrefix)) {
-    try {
-      const loaded = await get(storagePath, { access: "private", ...blobTokenOptions() });
-      if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return null;
-      return Buffer.from(await new Response(loaded.stream).arrayBuffer());
-    } catch (error) {
-      if (error instanceof BlobNotFoundError) return null;
-      throw error;
-    }
+  return readManagedFile(storagePath);
+}
+
+async function readBlob(storagePath: string) {
+  try {
+    const loaded = await get(storagePath, { access: "private", ...blobTokenOptions() });
+    if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return null;
+    return Buffer.from(await new Response(loaded.stream).arrayBuffer());
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return null;
+    throw error;
   }
-  const root = path.resolve(dataDir(), "uploads");
+}
+
+async function readLocal(storagePath: string) {
+  const root = path.resolve(dataDir());
   const resolved = path.resolve(storagePath);
   if (!resolved.startsWith(root)) return null;
-  return readFile(resolved);
+  try {
+    return await readFile(resolved);
+  } catch {
+    return null;
+  }
 }

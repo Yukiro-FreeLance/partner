@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
 import { BlobNotFoundError, get, head, put } from "@vercel/blob";
 import { blobTokenOptions } from "@/lib/blob-auth";
+import { packDatabase, unpackDatabase } from "@/lib/data/compact";
 import type { Database, Row, TableName } from "@/lib/domain";
 import { emptyDatabase, createMemoryRepository } from "@/lib/data/memory";
 import type { Repository } from "@/lib/data/repository";
@@ -45,10 +46,13 @@ function operatorReady(db: Database) {
   );
 }
 
+function databaseFromBytes(bytes: Buffer): Database {
+  return { ...emptyDatabase(), ...unpackDatabase(bytes) };
+}
+
 async function readDatabase(): Promise<Database> {
   try {
-    const raw = await readFile(filePath, "utf8");
-    return { ...emptyDatabase(), ...JSON.parse(raw) } as Database;
+    return databaseFromBytes(await readFile(filePath));
   } catch {
     return emptyDatabase();
   }
@@ -58,7 +62,7 @@ async function writeDatabase(db: Database) {
   try {
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporary = `${filePath}.tmp`;
-    await writeFile(temporary, JSON.stringify(db));
+    await writeFile(temporary, await packDatabase(db));
     await rename(temporary, filePath);
   } catch (error) {
     console.error("Could not save the local database", error instanceof Error ? error.message : "unknown error");
@@ -69,8 +73,8 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
   try {
     const loaded = await get(blobPath, { access: "private", ...blobTokenOptions() });
     if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return { db: emptyDatabase(), etag: null };
-    const raw = await new Response(loaded.stream).text();
-    return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: loaded.blob.etag };
+    const raw = Buffer.from(await new Response(loaded.stream).arrayBuffer());
+    return { db: databaseFromBytes(raw), etag: loaded.blob.etag };
   } catch (error) {
     if (error instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
     console.error("Blob read failed", error instanceof Error ? error.message : "unknown error", "token", Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()), "store", Boolean(process.env.BLOB_STORE_ID));
@@ -79,13 +83,13 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
       const token = blobTokenOptions().token;
       const plain = await fetch(info.downloadUrl);
       if (plain.ok) {
-        const raw = await plain.text();
-        return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+        const raw = Buffer.from(await plain.arrayBuffer());
+        return { db: databaseFromBytes(raw), etag: info.etag };
       }
       const authed = await fetch(info.downloadUrl, { headers: token ? { authorization: `Bearer ${token}` } : {} });
       if (authed.ok) {
-        const raw = await authed.text();
-        return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+        const raw = Buffer.from(await authed.arrayBuffer());
+        return { db: databaseFromBytes(raw), etag: info.etag };
       }
       const detail = await authed.text();
       console.error("Blob download", plain.status, authed.status, detail.slice(0, 300));
@@ -99,11 +103,11 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
 }
 
 async function writeBlobDatabase(db: Database) {
-  const saved = await put(blobPath, JSON.stringify(db), {
+  const saved = await put(blobPath, await packDatabase(db), {
     access: "private",
     addRandomSuffix: false,
     allowOverwrite: true,
-    contentType: "application/json",
+    contentType: "application/gzip",
     cacheControlMaxAge: 60,
     ...blobTokenOptions(),
   });
