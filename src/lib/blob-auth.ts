@@ -1,6 +1,6 @@
 import "server-only";
 
 export function blobTokenOptions(): { token?: string } {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   return token ? { token } : {};
 }

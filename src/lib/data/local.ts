@@ -73,17 +73,26 @@ async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }
     return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: loaded.blob.etag };
   } catch (error) {
     if (error instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
-    console.error("Blob read failed", error instanceof Error ? error.message : "unknown error", "token", Boolean(process.env.BLOB_READ_WRITE_TOKEN), "store", Boolean(process.env.BLOB_STORE_ID));
+    console.error("Blob read failed", error instanceof Error ? error.message : "unknown error", "token", Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()), "store", Boolean(process.env.BLOB_STORE_ID));
     try {
       const info = await head(blobPath, blobTokenOptions());
-      const response = await fetch(info.downloadUrl);
-      if (response.status === 404) return { db: emptyDatabase(), etag: null };
-      if (!response.ok) throw error;
-      const raw = await response.text();
-      return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+      const token = blobTokenOptions().token;
+      const plain = await fetch(info.downloadUrl);
+      if (plain.ok) {
+        const raw = await plain.text();
+        return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+      }
+      const authed = await fetch(info.downloadUrl, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+      if (authed.ok) {
+        const raw = await authed.text();
+        return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+      }
+      const detail = await authed.text();
+      console.error("Blob download", plain.status, authed.status, detail.slice(0, 300));
+      throw error;
     } catch (fallbackError) {
       if (fallbackError instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
-      console.error("Blob metadata read failed", fallbackError instanceof Error ? fallbackError.message : "unknown error");
+      if (fallbackError !== error) console.error("Blob metadata read failed", fallbackError instanceof Error ? fallbackError.message : "unknown error");
       throw error;
     }
   }

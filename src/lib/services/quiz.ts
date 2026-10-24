@@ -492,6 +492,7 @@ export type GradedQuestion = {
   mineLabel: string;
   partnerLabel: string | null;
   predictionLabel: string | null;
+  partnerGuessLabel: string | null;
 };
 
 export type RoundResults = {
@@ -546,6 +547,7 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
           sameRoundOnly: current.mode === "reverse",
         })
       : null;
+    const revealedPartnerGuess = partnerPrediction?.roundId && partnerDone.has(partnerPrediction.roundId) ? partnerPrediction : null;
     const comparison = comparisonFor(question, current, partner?.userId ?? null, partnerAnswer, myPrediction, partnerPrediction);
     graded.push({
       question,
@@ -557,6 +559,7 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
       mineLabel: mine ? describeAnswer(question.answerType, mine.payload, question.options, mine.skipped) : "Not answered yet",
       partnerLabel: partnerAnswer ? describeAnswer(question.answerType, partnerAnswer.payload, question.options, partnerAnswer.skipped) : null,
       predictionLabel: myPrediction ? describeAnswer(question.answerType, myPrediction.payload, question.options, myPrediction.skipped) : null,
+      partnerGuessLabel: revealedPartnerGuess ? describeAnswer(question.answerType, revealedPartnerGuess.payload, question.options, revealedPartnerGuess.skipped) : null,
     });
   }
   return ok({

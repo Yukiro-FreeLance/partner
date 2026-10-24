@@ -58,6 +58,21 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
       <p className="text-sm text-muted-foreground">{round.title}</p>
       <h1 className="font-serif text-4xl">What this round showed</h1>
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary.eligible > 0 ? `You matched ${summary.correct} of ${summary.eligible} scored guesses.` : waiting > 0 ? `${waiting} guess${waiting === 1 ? "" : "es"} ${waiting === 1 ? "is" : "are"} saved and waiting on ${partnerName ?? "your partner"}.` : summary.description} {SCORE_DISCLAIMER}</p>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <article className="panel p-5">
+          <h2 className="font-serif text-2xl">Goal</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Learn one true thing about each other. Your score is how close your guess came to what {partnerName ?? "your partner"} said. Their guess shows how close they came to what you said. A difference is something to ask about.</p>
+        </article>
+        <article className="panel p-5">
+          <h2 className="font-serif text-2xl">How it works</h2>
+          <ol className="mt-3 grid gap-2 text-sm leading-6 text-muted-foreground">
+            <li>1. You answer for yourself, then guess what they would say.</li>
+            <li>2. They answer and guess on their own round.</li>
+            <li>3. Their answer and their guess appear here after they finish.</li>
+            <li>4. Matched, close, and different compare your guess with their finished answer.</li>
+          </ol>
+        </article>
+      </section>
       {session?.status !== "completed" && (
         <form action={startQuizAction} className="panel flex flex-wrap items-center justify-between gap-3 p-5">
           <p className="text-sm">Your partner can already be finished. Add your answers to open the review.</p>
@@ -93,10 +108,11 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mark.badge}`}>{mark.label}</span>
                 </div>
                 <p className="mt-2 font-medium leading-6">{item.question.selfPrompt}</p>
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                   <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">You said</dt><dd className="mt-1 font-medium">{item.mineLabel}</dd></div>
                   <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">You guessed</dt><dd className="mt-1 font-medium">{item.predictionLabel ?? "No guess yet"}</dd></div>
                   <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">{partnerName ?? "Partner"} said</dt><dd className="mt-1 font-medium">{item.partnerLabel ?? "Waiting on their finished answer"}</dd></div>
+                  <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">{partnerName ?? "Partner"} guessed</dt><dd className="mt-1 font-medium">{item.partnerGuessLabel ?? (session?.status === "completed" ? "Waiting on their guess" : "Finish your round to see their guess")}</dd></div>
                 </dl>
                 {item.comparison?.reason === "unscored_text" && (
                   <form action={similarityAction} className="mt-3 flex flex-wrap gap-2">
