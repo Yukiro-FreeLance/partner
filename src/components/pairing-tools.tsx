@@ -22,6 +22,25 @@ export function CopyInviteLink({ url }: { url: string }) {
   );
 }
 
+export function ShareInviteLink({ url, coupleName }: { url: string; coupleName: string }) {
+  const [note, setNote] = useState("");
+  return (
+    <Button
+      type="button"
+      onClick={() => {
+        const payload = { title: "Join me on CoupleSync", text: `You're invited to ${coupleName}. Open this private invitation on CoupleSync.`, url };
+        if (typeof navigator.share === "function") {
+          void navigator.share(payload).then(() => setNote("Shared")).catch(() => undefined);
+          return;
+        }
+        void navigator.clipboard.writeText(url).then(() => setNote("Link copied"));
+      }}
+    >
+      {note || "Share invitation"}
+    </Button>
+  );
+}
+
 export function PairingWatch() {
   const router = useRouter();
   useEffect(() => {

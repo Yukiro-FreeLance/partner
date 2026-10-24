@@ -17,11 +17,11 @@ export function JoinForm({ code = "" }: { code?: string }) {
 export function CreateCoupleForm() {
   const [state, action, pending] = useActionState(createCoupleAction, {});
   return (
-    <form action={action} className="grid gap-4" data-testid="create-couple">
-      {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+    <form action={action} className="grid gap-4 sm:grid-cols-2" data-testid="create-couple">
+      {state.error && <p className="text-sm text-destructive sm:col-span-2" role="alert">{state.error}</p>}
       <label className="grid gap-2"><Label htmlFor="name">Couple name</Label><Input id="name" name="name" required placeholder="Us" /></label>
       <label className="grid gap-2"><Label htmlFor="nickname">Nickname, optional</Label><Input id="nickname" name="nickname" /></label>
-      <Button disabled={pending}>Create couple space</Button>
+      <Button disabled={pending} className="sm:col-span-2">Create couple space</Button>
     </form>
   );
 }

@@ -517,12 +517,16 @@ export type SiteSettings = {
   themeColor: string;
   faviconPath: string | null;
   faviconType: string | null;
+  faviconData: string | null;
   appleIconPath: string | null;
   appleIconType: string | null;
+  appleIconData: string | null;
   iconPath: string | null;
   iconType: string | null;
+  iconData: string | null;
   ogImagePath: string | null;
   ogImageType: string | null;
+  ogImageData: string | null;
   updatedAt: string;
 };
 

@@ -1,11 +1,11 @@
 import "server-only";
-import { createHash, randomBytes } from "crypto";
+import { createHash } from "crypto";
 import { compare, hash } from "bcryptjs";
 import type { Repository } from "@/lib/data/repository";
 import { createId } from "@/lib/ids";
 import { fail, ok } from "@/lib/result";
 import { assertRateLimit, writeAudit } from "@/lib/services/access";
-import { defaultPreferences } from "@/lib/auth/session";
+import { defaultPreferences, readAccountTicket, signAccountTicket } from "@/lib/auth/session";
 
 function now() {
   return new Date().toISOString();
@@ -66,9 +66,10 @@ export async function registerAccount(repo: Repository, input: { email: string; 
     createdAt: stamp,
     updatedAt: stamp,
   });
-  await repo.insert("credentials", { userId, passwordHash: await hash(input.password, 12) });
+  const passwordHash = await hash(input.password, 12);
+  await repo.insert("credentials", { userId, passwordHash });
   await repo.insert("userPreferences", defaultPreferences(userId));
-  const token = randomBytes(32).toString("hex");
+  const token = await signAccountTicket({ userId, email, displayName: input.displayName.trim(), passwordHash, purpose: "verify" });
   await repo.insert("emailTokens", {
     id: createId(),
     userId,
@@ -80,6 +81,38 @@ export async function registerAccount(repo: Repository, input: { email: string; 
   });
   await writeAudit(repo, userId, "account.registered");
   return ok({ userId, email, verifyToken: token });
+}
+
+async function materializeAccount(repo: Repository, ticket: { userId: string; email: string; displayName: string; passwordHash: string }, emailVerified: boolean) {
+  const stamp = now();
+  let profile = (await repo.find("profiles", { eq: { email: ticket.email } })) ?? (await repo.find("profiles", { eq: { id: ticket.userId } }));
+  if (!profile) {
+    profile = await repo.insert("profiles", {
+      id: ticket.userId,
+      email: ticket.email,
+      displayName: ticket.displayName,
+      avatarUrl: null,
+      bannerUrl: null,
+      relationshipStatus: null,
+      relationshipStartedOn: null,
+      interests: [],
+      preferredCategories: [],
+      role: "user",
+      isDemo: false,
+      emailVerified,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+  } else if (emailVerified && !profile.emailVerified) {
+    profile = await repo.update("profiles", profile.id, { emailVerified: true, updatedAt: stamp });
+  }
+  if (!(await repo.find("credentials", { eq: { userId: profile.id } }))) {
+    await repo.insert("credentials", { userId: profile.id, passwordHash: ticket.passwordHash });
+  }
+  if (!(await repo.find("userPreferences", { eq: { userId: profile.id } }))) {
+    await repo.insert("userPreferences", defaultPreferences(profile.id));
+  }
+  return profile;
 }
 
 export async function loginAccount(repo: Repository, email: string, password: string) {
@@ -96,6 +129,14 @@ export async function loginAccount(repo: Repository, email: string, password: st
 }
 
 export async function verifyEmailToken(repo: Repository, token: string) {
+  const ticket = await readAccountTicket(token, "verify");
+  if (ticket) {
+    const record = await repo.find("emailTokens", { eq: { tokenHash: tokenHash(token), purpose: "verify" } });
+    if (record && (record.usedAt || record.expiresAt < now())) return fail("This verification link is invalid or expired.");
+    const profile = await materializeAccount(repo, ticket, true);
+    if (record) await repo.update("emailTokens", record.id, { usedAt: now() });
+    return ok({ userId: profile.id });
+  }
   const record = await repo.find("emailTokens", { eq: { tokenHash: tokenHash(token), purpose: "verify" } });
   if (!record || record.usedAt || record.expiresAt < now()) return fail("This verification link is invalid or expired.");
   await repo.update("emailTokens", record.id, { usedAt: now() });
@@ -109,7 +150,9 @@ export async function requestPasswordReset(repo: Repository, email: string) {
   if (!allowed) return fail("Too many reset requests. Please wait and try again.");
   const profile = await repo.find("profiles", { eq: { email: normalized } });
   if (!profile || profile.isDemo) return ok({ token: null });
-  const token = randomBytes(32).toString("hex");
+  const credential = await repo.find("credentials", { eq: { userId: profile.id } });
+  if (!credential) return ok({ token: null });
+  const token = await signAccountTicket({ userId: profile.id, email: profile.email, displayName: profile.displayName, passwordHash: credential.passwordHash, purpose: "reset" });
   await repo.insert("emailTokens", {
     id: createId(),
     userId: profile.id,
@@ -123,9 +166,22 @@ export async function requestPasswordReset(repo: Repository, email: string) {
 }
 
 export async function resetPassword(repo: Repository, token: string, password: string) {
+  const passwordHash = await hash(password, 12);
+  const ticket = await readAccountTicket(token, "reset");
+  if (ticket) {
+    const record = await repo.find("emailTokens", { eq: { tokenHash: tokenHash(token), purpose: "reset" } });
+    if (record && (record.usedAt || record.expiresAt < now())) return fail("This reset link is invalid or expired.");
+    const profile = await materializeAccount(repo, ticket, true);
+    const credential = await repo.find("credentials", { eq: { userId: profile.id } });
+    if (credential) await repo.update("credentials", profile.id, { passwordHash });
+    else await repo.insert("credentials", { userId: profile.id, passwordHash });
+    if (record) await repo.update("emailTokens", record.id, { usedAt: now() });
+    await writeAudit(repo, profile.id, "account.password_reset");
+    return ok({ userId: profile.id });
+  }
   const record = await repo.find("emailTokens", { eq: { tokenHash: tokenHash(token), purpose: "reset" } });
   if (!record || record.usedAt || record.expiresAt < now()) return fail("This reset link is invalid or expired.");
-  await repo.update("credentials", record.userId, { passwordHash: await hash(password, 12) });
+  await repo.update("credentials", record.userId, { passwordHash });
   await repo.update("emailTokens", record.id, { usedAt: now() });
   await writeAudit(repo, record.userId, "account.password_reset");
   return ok({ userId: record.userId });
@@ -134,7 +190,9 @@ export async function resetPassword(repo: Repository, token: string, password: s
 export async function resendVerification(repo: Repository, email: string) {
   const profile = await repo.find("profiles", { eq: { email: email.trim().toLowerCase() } });
   if (!profile || profile.emailVerified) return ok({ token: null });
-  const token = randomBytes(32).toString("hex");
+  const credential = await repo.find("credentials", { eq: { userId: profile.id } });
+  if (!credential) return ok({ token: null });
+  const token = await signAccountTicket({ userId: profile.id, email: profile.email, displayName: profile.displayName, passwordHash: credential.passwordHash, purpose: "verify" });
   await repo.insert("emailTokens", {
     id: createId(),
     userId: profile.id,

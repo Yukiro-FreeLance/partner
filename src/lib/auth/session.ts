@@ -64,6 +64,31 @@ export async function signSession(userId: string, email = "") {
   return new SignJWT({ sub: userId, email }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("14d").sign(secret());
 }
 
+export async function signAccountTicket(input: { userId: string; email: string; displayName: string; passwordHash: string; purpose: "verify" | "reset" }) {
+  return new SignJWT({
+    purpose: input.purpose,
+    email: input.email,
+    name: input.displayName,
+    ph: input.passwordHash,
+  }).setSubject(input.userId).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(input.purpose === "reset" ? "30m" : "24h").sign(secret());
+}
+
+export async function readAccountTicket(token: string, purpose: "verify" | "reset") {
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.purpose !== purpose || typeof payload.sub !== "string") return null;
+    if (typeof payload.email !== "string" || typeof payload.ph !== "string") return null;
+    return {
+      userId: payload.sub,
+      email: payload.email.toLowerCase(),
+      displayName: typeof payload.name === "string" && payload.name.trim() ? payload.name : payload.email.split("@")[0] || "Partner",
+      passwordHash: payload.ph,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function readSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -131,10 +156,20 @@ function roleFor(email: string): Profile["role"] {
 }
 
 async function syncAdmin(profile: Profile) {
-  const role = profile.isDemo ? "user" : roleFor(profile.email);
-  if (role === profile.role) return profile;
   const repo = await getRepository();
-  return repo.update("profiles", profile.id, { role, updatedAt: new Date().toISOString() });
+  const stamp = new Date().toISOString();
+  if (profile.isDemo) {
+    if (profile.role === "user") return profile;
+    return repo.update("profiles", profile.id, { role: "user", updatedAt: stamp });
+  }
+  if (isSuperAdminEmail(profile.email)) {
+    if (profile.role === "super_admin") return profile;
+    return repo.update("profiles", profile.id, { role: "super_admin", updatedAt: stamp });
+  }
+  if (isAdminEmail(profile.email) && profile.role === "user") {
+    return repo.update("profiles", profile.id, { role: "admin", updatedAt: stamp });
+  }
+  return profile;
 }
 
 async function impersonatedUser(real: Profile) {

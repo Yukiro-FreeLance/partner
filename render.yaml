@@ -17,7 +17,7 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
-        value: "wendevNoReply <onboarding@resend.dev>"
+        value: "wendevNoReply <noreply@wendev.site>"
       - key: CONTACT_EMAIL
         sync: false
       - key: SUPER_ADMIN_EMAILS

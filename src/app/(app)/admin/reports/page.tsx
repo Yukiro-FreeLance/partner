@@ -14,7 +14,7 @@ export default async function ReportsPage() {
     <main className="grid gap-6">
       <h1 className="font-serif text-4xl">Reports</h1>
       <p className="mt-2 text-sm text-muted-foreground">Review the reason and target id. Answer text is not included.</p>
-      <ul className="mt-6 grid gap-3">
+      <ul className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {reports.map((report) => (
           <li key={report.id} className="rounded-3xl border bg-card p-4 text-sm">
             <p>{report.status} · {report.targetType} · {report.targetId}</p>

@@ -3,6 +3,7 @@ import { Bell, Heart, LifeBuoy, Lock, LogOut, Settings, Shield, Users } from "lu
 import { logoutAction, settingsAction } from "@/app/actions";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { BannerUpload } from "@/components/banner-upload";
+import { RelationshipStatusField } from "@/components/relationship-status";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth/session";
@@ -23,8 +24,8 @@ export default async function ProfilePage() {
   const achievements = await (await getRepository()).list("userAchievements", { eq: { userId: user.profile.id } });
   const handle = user.profile.email.split("@")[0];
   return (
-    <main className="grid w-full gap-6 px-4 py-6 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:px-8">
-      <section className="overflow-hidden rounded-[1.75rem] bg-white text-center shadow-[var(--shadow)]">
+    <main className="mx-auto grid w-full max-w-6xl items-start gap-6 px-4 py-6 lg:grid-cols-2 xl:grid-cols-3 lg:px-8">
+      <section className="h-fit overflow-hidden rounded-[1.75rem] bg-white text-center shadow-[var(--shadow)]">
         <BannerUpload src={user.profile.bannerUrl} control="top" className="h-48">
           <h1 className="absolute top-4 left-5 z-10 font-serif text-2xl text-white drop-shadow">Profile</h1>
         </BannerUpload>
@@ -35,15 +36,14 @@ export default async function ProfilePage() {
         <p className="text-sm text-muted-foreground">@{handle}</p>
         <p className="mt-2 pb-6 text-sm text-rose">{user.preferences.locale === "fil" ? "Filipino" : "English"} · {achievements.length} achievements · {user.preferences.points} points</p>
       </section>
-      <div className="grid gap-6">
-        <form action={settingsAction} className="grid gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
+      <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-serif text-2xl">Profile settings</h2>
             <Link href="/settings" className="flex size-11 items-center justify-center rounded-full bg-secondary" aria-label="Account settings"><Settings className="size-5" /></Link>
           </div>
           <label className="grid gap-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /></label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-2"><Label htmlFor="relationshipStatus">Relationship</Label><Input id="relationshipStatus" name="relationshipStatus" defaultValue={user.profile.relationshipStatus ?? ""} /></label>
+            <RelationshipStatusField label="Relationship" defaultValue={user.profile.relationshipStatus} />
             <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" defaultValue={user.profile.relationshipStartedOn ?? ""} /></label>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -61,6 +61,7 @@ export default async function ProfilePage() {
           <input type="hidden" name="reminderHour" value={user.preferences.reminderHour ?? ""} />
           <Button type="submit">Save profile</Button>
         </form>
+        <div className="grid h-fit gap-4">
         <nav className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
           {rows.map(([href, label, Icon]) => (
             <Link key={label} href={href} className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm last:border-b-0">
@@ -89,7 +90,7 @@ export default async function ProfilePage() {
             <LogOut className="size-4" aria-hidden /> Log out
           </button>
         </form>
-      </div>
+        </div>
     </main>
   );
 }

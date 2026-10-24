@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/site-asset/favicon" }];
+  },
   async headers() {
     return [
       {

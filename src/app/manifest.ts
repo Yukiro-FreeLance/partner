@@ -3,8 +3,8 @@ import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const settings = await getSiteSettings();
-  const icon = settings.iconPath ? siteAssetUrl("icon") : settings.faviconPath ? siteAssetUrl("favicon") : "/brand/logo.jpg";
-  const type = settings.iconType || settings.faviconType || "image/jpeg";
+  const kind = settings.iconData || settings.iconPath ? "icon" : "favicon";
+  const type = (kind === "icon" ? settings.iconType : settings.faviconType) || "image/jpeg";
   return {
     name: settings.siteName,
     short_name: settings.siteName,
@@ -13,6 +13,6 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     display: "standalone",
     background_color: "#f6f3fb",
     theme_color: settings.themeColor || "#6d28d9",
-    icons: [{ src: icon, sizes: "512x512", type }],
+    icons: [{ src: siteAssetUrl(kind, settings.updatedAt), sizes: "512x512", type }],
   };
 }

@@ -64,7 +64,7 @@ export async function registerAction(_state: FormState, formData: FormData): Pro
     to: created.data.email,
     subject: "Verify your CoupleSync email",
     intro: "Confirm this address to finish creating your account. The link expires in 24 hours.",
-    path: `/verify-email?token=${created.data.verifyToken}`,
+    path: `/api/verify-email?token=${encodeURIComponent(created.data.verifyToken)}`,
     sentMessage: "Account created. Check your email for the verification link.",
     localMessage: "Account created. Email delivery is not configured, so use this one-time verification link on this machine.",
   });
@@ -167,7 +167,7 @@ export async function resendAction(_state: FormState, formData: FormData): Promi
     to: formString(formData, "email"),
     subject: "Verify your CoupleSync email",
     intro: "Here is a new link to confirm your email. It expires in 24 hours.",
-    path: `/verify-email?token=${result.data.token}`,
+    path: `/api/verify-email?token=${encodeURIComponent(result.data.token)}`,
     sentMessage: "If that account still needs verification, a new link is on its way.",
     localMessage: "Use this one-time verification link on this machine.",
   });
@@ -631,13 +631,15 @@ export async function setMemberRoleAction(formData: FormData) {
   if (actor.role !== "super_admin") redirect("/home");
   const targetId = formString(formData, "userId");
   const role = formString(formData, "role") === "admin" ? "admin" : "user";
-  if (!targetId || targetId === actor.id) return;
+  if (!targetId || targetId === actor.id) redirect("/admin/users?error=" + encodeURIComponent("You cannot change your own role."));
   const repo = await getRepository();
   const target = await repo.find("profiles", { eq: { id: targetId } });
-  if (!target || target.isDemo || target.role === "super_admin") return;
+  if (!target) redirect("/admin/users?error=" + encodeURIComponent("That account is not on this server. Open the list again and save the role."));
+  if (target.isDemo || target.role === "super_admin") redirect("/admin/users?error=" + encodeURIComponent("That role cannot be changed."));
   await repo.update("profiles", target.id, { role, updatedAt: new Date().toISOString() });
   await writeAudit(repo, actor.id, `set role ${target.id} ${role}`);
   revalidatePath("/admin/users");
+  redirect(`/admin/users?saved=${encodeURIComponent(target.displayName)}`);
 }
 
 export async function stopImpersonatingAction() {
@@ -698,6 +700,7 @@ export async function siteSettingsAction(formData: FormData) {
   }
   await writeAudit(repo, actor.id, "site.settings");
   revalidatePath("/", "layout");
+  revalidatePath("/favicon.ico");
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=1");
 }

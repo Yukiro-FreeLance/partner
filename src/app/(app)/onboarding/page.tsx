@@ -1,5 +1,6 @@
 import { finishOnboardingAction, onboardingAction } from "@/app/actions";
 import { CreateCoupleForm, JoinForm } from "@/components/join-form";
+import { RelationshipStatusField } from "@/components/relationship-status";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth/session";
@@ -25,7 +26,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       {step === "relationship" && (
         <form action={onboardingAction} className="mt-6 grid gap-4">
           <input type="hidden" name="step" value="relationship" />
-          <label className="grid gap-2"><Label htmlFor="relationshipStatus">Relationship status</Label><Input id="relationshipStatus" name="relationshipStatus" placeholder="Dating, engaged, married, or your own words" /></label>
+          <RelationshipStatusField defaultValue={user.profile.relationshipStatus} />
           <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since, optional</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" /></label>
           <Button>Continue</Button>
         </form>

@@ -9,12 +9,16 @@ create table if not exists public.site_settings (
   theme_color text not null default '#6d28d9',
   favicon_path text,
   favicon_type text,
+  favicon_data text,
   apple_icon_path text,
   apple_icon_type text,
+  apple_icon_data text,
   icon_path text,
   icon_type text,
+  icon_data text,
   og_image_path text,
   og_image_type text,
+  og_image_data text,
   updated_at timestamptz not null default now()
 );
 

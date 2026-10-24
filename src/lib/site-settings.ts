@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import type { SiteAssetKind, SiteSettings } from "@/lib/domain";
 import { dataDir } from "@/lib/data/paths";
@@ -16,34 +16,40 @@ export const defaultSiteSettings: SiteSettings = {
   themeColor: "#6d28d9",
   faviconPath: null,
   faviconType: null,
+  faviconData: null,
   appleIconPath: null,
   appleIconType: null,
+  appleIconData: null,
   iconPath: null,
   iconType: null,
+  iconData: null,
   ogImagePath: null,
   ogImageType: null,
+  ogImageData: null,
   updatedAt: "",
 };
 
-const assetFields: Record<SiteAssetKind, { path: keyof SiteSettings; type: keyof SiteSettings }> = {
-  favicon: { path: "faviconPath", type: "faviconType" },
-  apple: { path: "appleIconPath", type: "appleIconType" },
-  icon: { path: "iconPath", type: "iconType" },
-  og: { path: "ogImagePath", type: "ogImageType" },
+const assetFields: Record<SiteAssetKind, { path: keyof SiteSettings; type: keyof SiteSettings; data: keyof SiteSettings }> = {
+  favicon: { path: "faviconPath", type: "faviconType", data: "faviconData" },
+  apple: { path: "appleIconPath", type: "appleIconType", data: "appleIconData" },
+  icon: { path: "iconPath", type: "iconType", data: "iconData" },
+  og: { path: "ogImagePath", type: "ogImageType", data: "ogImageData" },
 };
 
 export function isSiteAssetKind(value: string): value is SiteAssetKind {
   return value === "favicon" || value === "apple" || value === "icon" || value === "og";
 }
 
-export function siteAssetUrl(kind: SiteAssetKind) {
-  return `/site-asset/${kind}`;
+export function siteAssetUrl(kind: SiteAssetKind, version = "") {
+  const base = `/site-asset/${kind}`;
+  return version ? `${base}?v=${encodeURIComponent(version)}` : base;
 }
 
 export async function getSiteSettings() {
   try {
     const repo = await getRepository();
-    return (await repo.find("siteSettings", { eq: { id: "default" } })) ?? { ...defaultSiteSettings };
+    const row = await repo.find("siteSettings", { eq: { id: "default" } });
+    return { ...defaultSiteSettings, ...row, id: "default" };
   } catch (error) {
     console.error("Site settings unavailable", error instanceof Error ? error.message : "unknown error");
     return { ...defaultSiteSettings };
@@ -52,7 +58,7 @@ export async function getSiteSettings() {
 
 export async function saveSiteSettings(patch: Partial<SiteSettings>) {
   const repo = await getRepository();
-  const current = (await repo.find("siteSettings", { eq: { id: "default" } })) ?? { ...defaultSiteSettings };
+  const current = await getSiteSettings();
   const next = { ...current, ...patch, id: "default", updatedAt: new Date().toISOString() };
   if (current.updatedAt) return repo.update("siteSettings", "default", next);
   return repo.insert("siteSettings", next);
@@ -79,9 +85,31 @@ export async function storeSiteAsset(kind: SiteAssetKind, file: File) {
   if (file.size > limit) return { ok: false as const, error: "That image is too large." };
   const extension = contentType === "image/jpeg" ? ".jpg" : contentType === "image/webp" ? ".webp" : contentType === "image/gif" ? ".gif" : contentType.includes("icon") ? ".ico" : ".png";
   const storagePath = path.join(dataDir(), "site", `${kind}${extension}`);
+  const bytes = Buffer.from(await file.arrayBuffer());
   await mkdir(path.dirname(storagePath), { recursive: true });
-  await writeFile(storagePath, Buffer.from(await file.arrayBuffer()));
+  await writeFile(storagePath, bytes);
   const fields = assetFields[kind];
-  await saveSiteSettings({ [fields.path]: storagePath, [fields.type]: contentType });
+  await saveSiteSettings({ [fields.path]: storagePath, [fields.type]: contentType, [fields.data]: bytes.toString("base64") });
   return { ok: true as const };
+}
+
+export async function loadSiteAsset(kind: SiteAssetKind) {
+  const settings = await getSiteSettings();
+  const fields = assetFields[kind];
+  const encoded = settings[fields.data];
+  const type = (typeof settings[fields.type] === "string" && settings[fields.type]) || "image/png";
+  if (typeof encoded === "string" && encoded) return { bytes: Buffer.from(encoded, "base64"), type };
+  const stored = settings[fields.path];
+  if (typeof stored === "string" && stored) {
+    const root = path.resolve(dataDir(), "site");
+    const resolved = path.resolve(stored);
+    if (resolved.startsWith(root)) {
+      try {
+        return { bytes: await readFile(resolved), type };
+      } catch {
+        // The file is on another server. Fall through to the built-in logo.
+      }
+    }
+  }
+  return { bytes: await readFile(path.join(process.cwd(), "public", "brand", "logo.jpg")), type: "image/jpeg" };
 }

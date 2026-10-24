@@ -18,8 +18,8 @@ const montserrat = Montserrat({
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
   const keywords = settings.keywords.split(",").map((item) => item.trim()).filter(Boolean);
-  const icon = settings.faviconPath ? [{ url: siteAssetUrl("favicon"), type: settings.faviconType ?? "image/png" }] : [{ url: "/brand/logo.jpg", type: "image/jpeg" }];
-  const apple = settings.appleIconPath ? [{ url: siteAssetUrl("apple"), type: settings.appleIconType ?? "image/png" }] : icon;
+  const icon = [{ url: siteAssetUrl("favicon", settings.updatedAt), type: settings.faviconType ?? "image/jpeg" }];
+  const apple = [{ url: siteAssetUrl("apple", settings.updatedAt), type: settings.appleIconType ?? settings.faviconType ?? "image/jpeg" }];
   return {
     metadataBase: new URL(siteUrl()),
     title: { default: settings.title, template: `%s · ${settings.siteName}` },

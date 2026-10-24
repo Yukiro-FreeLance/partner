@@ -13,7 +13,7 @@ export function isMailConfigured() {
 export function mailFrom() {
   const configured = process.env.EMAIL_FROM?.trim();
   if (configured) return configured;
-  return "wendevNoReply <onboarding@resend.dev>";
+  return "wendevNoReply <noreply@wendev.site>";
 }
 
 function escapeHtml(value: string) {
