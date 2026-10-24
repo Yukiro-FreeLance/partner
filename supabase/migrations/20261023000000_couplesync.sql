@@ -7,56 +7,63 @@
 
 create or replace function public.is_couple_member(target_couple text)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1 from public.couple_members
     where couple_id = target_couple
       and user_id = auth.uid()::text
       and status = 'active'
   );
+end;
 $$;
 
 create or replace function public.is_admin()
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1 from public.profiles
     where id = auth.uid()::text and role = 'admin'
   );
+end;
 $$;
 
 create or replace function public.answer_revealed_to_me(owner text, question text, couple text)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1 from public.answer_reveals
     where owner_id = owner
       and question_id = question
       and couple_id = couple
       and viewer_id = auth.uid()::text
   );
+end;
 $$;
 
 create or replace function public.question_is_visible(target text)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1 from public.questions q
     where q.id = target
       and q.is_active
@@ -66,6 +73,7 @@ as $$
         or (q.visibility = 'couple' and public.is_couple_member(q.couple_id))
       )
   );
+end;
 $$;
 
 create or replace function public.enforce_couple_membership()
