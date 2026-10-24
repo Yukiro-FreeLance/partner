@@ -8,7 +8,7 @@ import type {
   QuizSession,
   UserAnswer,
 } from "@/lib/domain";
-import type { Repository } from "@/lib/data/repository";
+import { runWrite, type Repository } from "@/lib/data/repository";
 import { dependencyMet, describeAnswer } from "@/lib/answers";
 import { createId } from "@/lib/ids";
 import { fail, ok, type Result } from "@/lib/result";
@@ -61,7 +61,7 @@ async function roundQuestions(repo: Repository, roundId: string) {
 }
 
 export async function startQuiz(
-  repo: Repository,
+  source: Repository,
   userId: string,
   input: {
     mode: QuizMode;
@@ -75,7 +75,14 @@ export async function startQuiz(
     roundId?: string;
   },
 ): Promise<Result<RoundView>> {
+  return runWrite(source, async (repo) => {
+  if (repo !== source) return startQuiz(repo, userId, input);
   if (input.roundId) return joinRound(repo, userId, input.roundId);
+  const membershipForJoin = await activeMembership(repo, userId);
+  if (membershipForJoin && !input.questionIds?.length) {
+    const openRound = await findPartnerRound(repo, userId, membershipForJoin.coupleId, input);
+    if (openRound) return joinRound(repo, userId, openRound.id);
+  }
   if ((input.categories ?? []).includes("intimacy") && !input.includeSensitive) {
     return fail("Closeness questions stay off until you confirm you are 18 or older and choose to include them.");
   }
@@ -107,6 +114,7 @@ export async function startQuiz(
   const session = await insertSession(repo, round.id, userId);
   await writeAudit(repo, userId, "quiz.started", membership.coupleId);
   return ok({ round, session, questions: selected, answers: [], predictions: [] });
+  });
 }
 
 async function selectQuestions(
@@ -144,6 +152,27 @@ async function selectQuestions(
   const shuffled = [...source].sort(() => Math.random() - 0.5);
   const size = Math.max(1, input.size ?? 10);
   return questionsByIds(repo, shuffled.slice(0, size).map((question) => question.id));
+}
+
+async function findPartnerRound(
+  repo: Repository,
+  userId: string,
+  coupleId: string,
+  input: { mode: QuizMode; title?: string; categories?: string[] },
+) {
+  const title = input.title?.trim() || defaultTitle(input.mode);
+  const categories = [...(input.categories ?? [])].sort().join(",");
+  const rounds = (await repo.list("quizRounds", { eq: { coupleId, mode: input.mode } }))
+    .filter((round) => round.title === title && [...round.categories].sort().join(",") === categories)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sessions = await repo.list("quizSessions", {});
+  for (const round of rounds) {
+    const mine = sessions.find((session) => session.roundId === round.id && session.userId === userId);
+    if (mine?.status === "completed") continue;
+    const partnerPlayed = sessions.some((session) => session.roundId === round.id && session.userId !== userId);
+    if (partnerPlayed) return round;
+  }
+  return null;
 }
 
 function defaultTitle(mode: QuizMode) {
@@ -188,7 +217,7 @@ export async function joinRound(repo: Repository, userId: string, roundId: strin
 }
 
 export async function saveQuizProgress(
-  repo: Repository,
+  source: Repository,
   userId: string,
   input: {
     sessionId: string;
@@ -198,6 +227,8 @@ export async function saveQuizProgress(
     prediction?: { payload: AnswerPayload; skipped: boolean; kind?: "partner" | "reverse" } | null;
   },
 ): Promise<Result<{ nextQuestion: QuizQuestion | null }>> {
+  return runWrite(source, async (repo) => {
+  if (repo !== source) return saveQuizProgress(repo, userId, input);
   const session = await repo.find("quizSessions", { eq: { id: input.sessionId, userId } });
   if (!session) return fail("Quiz session not found.");
   if (session.status === "completed") return fail("This quiz has already been submitted.");
@@ -215,7 +246,7 @@ export async function saveQuizProgress(
       coupleId: round.coupleId,
       questionId: question.id,
       roundId: round.id,
-      payload: input.selfAnswer.payload,
+      payload: input.selfAnswer.skipped ? input.selfAnswer.payload : { ...input.selfAnswer.payload, shareWithPartner: true },
       skipped: input.selfAnswer.skipped,
     });
   }
@@ -240,6 +271,7 @@ export async function saveQuizProgress(
   const refreshed = await roundQuestions(repo, round.id);
   const position = refreshed.findIndex((item) => item.id === question.id);
   return ok({ nextQuestion: refreshed[position + 1] ?? null });
+  });
 }
 
 async function upsertAnswer(
@@ -290,7 +322,9 @@ async function maybeInsertConditional(
   }
 }
 
-export async function completeQuiz(repo: Repository, userId: string, sessionId: string): Promise<Result<{ roundId: string; summary: ScoreSummary }>> {
+export async function completeQuiz(source: Repository, userId: string, sessionId: string): Promise<Result<{ roundId: string; summary: ScoreSummary }>> {
+  return runWrite(source, async (repo) => {
+  if (repo !== source) return completeQuiz(repo, userId, sessionId);
   const session = await repo.find("quizSessions", { eq: { id: sessionId, userId } });
   if (!session) return fail("Quiz session not found.");
   if (session.status === "completed") return fail("This quiz has already been submitted.");
@@ -315,13 +349,14 @@ export async function completeQuiz(repo: Repository, userId: string, sessionId: 
       coupleId: round.coupleId,
       type: ready ? "quiz_ready" : "quiz_completed",
       title: ready ? "A quiz is ready to open" : "Your partner finished a quiz",
-      body: ready ? "You can look at the shared results whenever you are both ready." : "Their answers stay hidden until the quiz rules say it is time.",
+      body: ready ? "You can review the shared answers now." : "Open the quiz, add your answers, and their answers open with yours.",
       href: `/play/results/${round.id}`,
     });
   }
   await grantAchievements(repo, userId, round.coupleId);
   await writeAudit(repo, userId, "quiz.completed", round.coupleId);
   return ok({ roundId: round.id, summary });
+  });
 }
 
 async function missingResponses(repo: Repository, round: QuizRound, userId: string, questions: QuizQuestion[]) {
@@ -336,7 +371,7 @@ async function missingResponses(repo: Repository, round: QuizRound, userId: stri
   });
 }
 
-export async function openReveals(repo: Repository, roundId: string) {
+export async function openReveals(repo: Repository, roundId: string, options?: { snapshots?: boolean }) {
   const round = await repo.find("quizRounds", { eq: { id: roundId } });
   if (!round) return;
   const sessions = await repo.list("quizSessions", { eq: { roundId } });
@@ -361,6 +396,7 @@ export async function openReveals(repo: Repository, roundId: string) {
       }
     }
   }
+  if (options?.snapshots === false) return;
   for (const session of completed) await writeSnapshot(repo, session.userId, round.coupleId, round.id);
 }
 
@@ -383,14 +419,15 @@ async function writeSnapshot(repo: Repository, userId: string, coupleId: string,
 }
 
 async function revealAnswers(repo: Repository, round: QuizRound, ownerId: string, viewerId: string) {
-  const links = await repo.list("quizRoundQuestions", { eq: { roundId: round.id } });
+  const [links, answers, reveals] = await Promise.all([
+    repo.list("quizRoundQuestions", { eq: { roundId: round.id } }),
+    repo.list("userAnswers", { eq: { userId: ownerId, coupleId: round.coupleId } }),
+    repo.list("answerReveals", { eq: { roundId: round.id, ownerId, viewerId } }),
+  ]);
+  const revealed = new Set(reveals.map((item) => item.questionId));
   for (const link of links) {
-    const answer = await repo.find("userAnswers", { eq: { userId: ownerId, coupleId: round.coupleId, questionId: link.questionId } });
-    if (!answer || answer.skipped) continue;
-    const question = await repo.find("questions", { eq: { id: link.questionId } });
-    if (question?.sensitive && answer.payload.shareWithPartner !== true) continue;
-    const existing = await repo.find("answerReveals", { eq: { roundId: round.id, questionId: link.questionId, ownerId, viewerId } });
-    if (existing) continue;
+    const answer = answers.find((item) => item.questionId === link.questionId);
+    if (!answer || answer.skipped || revealed.has(link.questionId)) continue;
     await repo.insert("answerReveals", {
       id: createId(),
       coupleId: round.coupleId,
@@ -471,23 +508,45 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
   const access = await requireMembership(repo, viewerId, round.coupleId);
   if (!access.ok) return access;
   if (round.mode === "solo" && round.createdBy !== viewerId && !round.resultsShared) return fail("This practice quiz is still private.");
-  const questions = await roundQuestions(repo, round.id);
+  await openReveals(repo, round.id, { snapshots: false });
+  const current = (await repo.find("quizRounds", { eq: { id: roundId } })) ?? round;
+  const questions = await roundQuestions(repo, current.id);
   const session = await repo.find("quizSessions", { eq: { roundId, userId: viewerId } });
-  const partner = await otherPartner(repo, round.coupleId, viewerId);
+  const partner = await otherPartner(repo, current.coupleId, viewerId);
   const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
+  const viewerDone = session?.status === "completed";
+  const [viewerAnswers, partnerAnswers, predictions, partnerSessions] = await Promise.all([
+    repo.list("userAnswers", { eq: { userId: viewerId, coupleId: current.coupleId } }),
+    partner ? repo.list("userAnswers", { eq: { userId: partner.userId, coupleId: current.coupleId } }) : Promise.resolve([]),
+    repo.list("answerPredictions", { eq: { coupleId: current.coupleId } }),
+    partner ? repo.list("quizSessions", { eq: { userId: partner.userId, status: "completed" } }) : Promise.resolve([]),
+  ]);
+  const partnerDone = new Set(partnerSessions.map((item) => item.roundId));
   const graded: GradedQuestion[] = [];
   for (const question of questions) {
-    const mine = await repo.find("userAnswers", { eq: { userId: viewerId, coupleId: round.coupleId, questionId: question.id } });
-    const myPrediction = (await repo.list("answerPredictions", { eq: { predictorId: viewerId, roundId, questionId: question.id } }))[0] ?? null;
-    const reveal = partner
-      ? await repo.find("answerReveals", { eq: { roundId, questionId: question.id, ownerId: partner.userId, viewerId } })
+    const mine = viewerAnswers.find((item) => item.questionId === question.id) ?? null;
+    const guessKind = current.mode === "reverse" ? "reverse" : "partner";
+    const myPrediction = choosePrediction(predictions, {
+      questionId: question.id,
+      predictorId: viewerId,
+      subjectId: current.mode === "reverse" ? viewerId : partner?.userId ?? "",
+      roundId: current.id,
+      kind: guessKind,
+      sameRoundOnly: current.mode === "reverse",
+    });
+    const storedPartnerAnswer = partnerAnswers.find((item) => item.questionId === question.id) ?? null;
+    const partnerAnswer = viewerDone && storedPartnerAnswer?.roundId && partnerDone.has(storedPartnerAnswer.roundId) ? storedPartnerAnswer : null;
+    const partnerPrediction = viewerDone
+      ? choosePrediction(predictions, {
+          questionId: question.id,
+          predictorId: partner?.userId ?? "",
+          subjectId: viewerId,
+          roundId: current.id,
+          kind: "partner",
+          sameRoundOnly: current.mode === "reverse",
+        })
       : null;
-    const partnerAnswer = reveal && partner ? await repo.find("userAnswers", { eq: { userId: partner.userId, coupleId: round.coupleId, questionId: question.id } }) : null;
-    const canSeePartnerPrediction = Boolean(partner) && (round.resultsShared || (round.mode === "reverse" && session?.status === "completed"));
-    const partnerPrediction = canSeePartnerPrediction
-      ? ((await repo.list("answerPredictions", { eq: { predictorId: partner!.userId, questionId: question.id, subjectId: viewerId, kind: "partner" } })).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null)
-      : null;
-    const comparison = comparisonFor(question, round, partner?.userId ?? null, partnerAnswer, myPrediction, partnerPrediction);
+    const comparison = comparisonFor(question, current, partner?.userId ?? null, partnerAnswer, myPrediction, partnerPrediction);
     graded.push({
       question,
       mine,
@@ -501,12 +560,26 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
     });
   }
   return ok({
-    round,
+    round: current,
     session,
     partnerName: partnerProfile?.displayName ?? null,
     questions: graded,
     summary: summarize(graded.map((item) => item.comparison).filter((item): item is Comparison => Boolean(item))),
   });
+}
+
+function choosePrediction(
+  rows: AnswerPrediction[],
+  input: { questionId: string; predictorId: string; subjectId: string; roundId: string; kind: "partner" | "reverse"; sameRoundOnly: boolean },
+) {
+  const matches = rows.filter((item) => item.questionId === input.questionId && item.predictorId === input.predictorId && item.subjectId === input.subjectId && item.kind === input.kind && (!input.sameRoundOnly || item.roundId === input.roundId));
+  matches.sort((left, right) => {
+    const leftHere = left.roundId === input.roundId ? 1 : 0;
+    const rightHere = right.roundId === input.roundId ? 1 : 0;
+    if (leftHere !== rightHere) return rightHere - leftHere;
+    return right.createdAt.localeCompare(left.createdAt);
+  });
+  return matches[0] ?? null;
 }
 
 function comparisonFor(
@@ -555,6 +628,20 @@ export async function getOrCreateDaily(repo: Repository, userId: string) {
   const started = await startQuiz(repo, userId, { mode: "daily", title: "Today's Couple Challenge", questionIds: picked.map((question) => question.id), size: picked.length, categories: [] });
   if (!started.ok) return started;
   return ok({ ...started.data, resetAt, dayKey: key, timeZone: DAILY_TIME_ZONE });
+}
+
+export async function listRoundCards(repo: Repository, userId: string) {
+  const membership = await activeMembership(repo, userId);
+  if (!membership) return [];
+  const rounds = await repo.list("quizRounds", { eq: { coupleId: membership.coupleId } });
+  const sessions = await repo.list("quizSessions", {});
+  return rounds
+    .map((round) => {
+      const mine = sessions.find((session) => session.roundId === round.id && session.userId === userId) ?? null;
+      const partnerDone = sessions.some((session) => session.roundId === round.id && session.userId !== userId && session.status === "completed");
+      return { round, mine, partnerDone };
+    })
+    .sort((a, b) => b.round.updatedAt.localeCompare(a.round.updatedAt));
 }
 
 export async function listMySessions(repo: Repository, userId: string) {

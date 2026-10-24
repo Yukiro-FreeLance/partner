@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/config";
 import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
+import { runWrite } from "@/lib/data/repository";
 import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, resendVerification, resetPassword, verifyEmailToken } from "@/lib/auth/accounts";
 import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -305,6 +306,13 @@ export async function finishOnboardingAction() {
 export async function startQuizAction(formData: FormData) {
   const user = await requireUser();
   const repo = await getRepository();
+  const roundId = formString(formData, "roundId");
+  if (roundId) {
+    const joined = await startQuiz(repo, user.profile.id, { mode: "exchange", roundId });
+    if (!joined.ok) redirect(`/play?error=${encodeURIComponent(joined.error)}`);
+    if (joined.data.session.status === "completed") redirect(`/play/results/${joined.data.round.id}`);
+    redirect(`/play/quiz/${joined.data.session.id}`);
+  }
   const mode = formString(formData, "mode") as QuizMode;
   const size = Number(formString(formData, "size") || "10");
   const categories = formData.getAll("categories").map(String);
@@ -342,6 +350,19 @@ export async function completeQuizAction(sessionId: string) {
   const repo = await getRepository();
   const result = await completeQuiz(repo, user.profile.id, sessionId);
   if (!result.ok) return { error: result.error };
+  redirect(`/play/results/${result.data.roundId}`);
+}
+
+export async function finishQuizAction(input: { sessionId: string; questionId: string; currentIndex: number; selfAnswer?: { payload: AnswerPayload; skipped: boolean } | null; prediction?: { payload: AnswerPayload; skipped: boolean } | null }) {
+  const user = await requireUser();
+  const repo = await getRepository();
+  const result = await runWrite(repo, async (tx) => {
+    const saved = await saveQuizProgress(tx, user.profile.id, input);
+    if (!saved.ok) return saved;
+    return completeQuiz(tx, user.profile.id, input.sessionId);
+  });
+  if (!result.ok) return { error: result.error };
+  if (!("roundId" in result.data)) return { error: "Could not submit this quiz." };
   redirect(`/play/results/${result.data.roundId}`);
 }
 

@@ -86,10 +86,6 @@ export function compareResponses(
   }
   if (!actual) return ineligible("missing_actual");
   if (!prediction) return ineligible("missing_prediction");
-  if (question.sensitive && actual.payload.shareWithPartner !== true) {
-    return ineligible("private");
-  }
-
   const type = question.answerType;
 
   if (CHOICE_TYPES.has(type)) {
@@ -214,7 +210,7 @@ export function summarize(comparisons: Comparison[], purpose: "knowledge" | "pre
       label: "Not enough answers yet",
       description:
         purpose === "knowledge"
-          ? "A score appears after a guess can be compared with a partner's own answer. Skipped and private answers stay out of the math."
+          ? "A score appears when your guess can be compared with an answer your partner has finished. Skipped questions stay out of the math."
           : "Preference alignment appears after both of you have answered the same question.",
       correct: 0,
       close: 0,

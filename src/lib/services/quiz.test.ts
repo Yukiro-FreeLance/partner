@@ -123,7 +123,27 @@ describe("quiz scoring and privacy", () => {
     expect(outsider.ok).toBe(false);
   });
 
-  it("does not reveal a sensitive answer unless it was explicitly shared", async () => {
+  it("scores a finished partner answer from another round of the same questions", async () => {
+    const { repo } = await fixture();
+    const theirs = await startQuiz(repo, "b", { mode: "exchange", questionIds: ["color"], includeSensitive: true, size: 1 });
+    if (!theirs.ok) throw new Error(theirs.error);
+    await saveQuizProgress(repo, "b", { sessionId: theirs.data.session.id, questionId: "color", currentIndex: 1, selfAnswer: { payload: { choice: "green" }, skipped: false }, prediction: { payload: { choice: "blue" }, skipped: false } });
+    expect((await completeQuiz(repo, "b", theirs.data.session.id)).ok).toBe(true);
+
+    const mine = await startQuiz(repo, "a", { mode: "exchange", questionIds: ["color"], includeSensitive: true, size: 1 });
+    if (!mine.ok) throw new Error(mine.error);
+    expect(mine.data.round.id).not.toBe(theirs.data.round.id);
+    await saveQuizProgress(repo, "a", { sessionId: mine.data.session.id, questionId: "color", currentIndex: 1, selfAnswer: { payload: { choice: "blue" }, skipped: false }, prediction: { payload: { choice: "green" }, skipped: false } });
+    expect((await completeQuiz(repo, "a", mine.data.session.id)).ok).toBe(true);
+
+    const view = await getRoundResults(repo, "a", mine.data.round.id);
+    if (!view.ok) throw new Error(view.error);
+    expect(view.data.questions[0]?.partnerLabel).toBe("Green");
+    expect(view.data.summary.score).toBe(100);
+    expect(view.data.summary.eligible).toBe(1);
+  });
+
+  it("reveals a sensitive answer after both people finish", async () => {
     const { repo } = await fixture();
     const started = await startQuiz(repo, "a", { mode: "exchange", questionIds: ["secret"], includeSensitive: true, size: 1 });
     if (!started.ok) throw new Error(started.error);
@@ -135,8 +155,8 @@ describe("quiz scoring and privacy", () => {
     await completeQuiz(repo, "b", joined.data.session.id);
     const view = await getRoundResults(repo, "b", started.data.round.id);
     if (!view.ok) throw new Error(view.error);
-    expect(view.data.questions[0]?.partnerAnswer).toBeNull();
-    expect(view.data.summary.score).toBeNull();
+    expect(view.data.questions[0]?.partnerLabel).toBeTruthy();
+    expect(view.data.summary.score).toBe(100);
   });
 
   it("keeps one daily round and one reward for the same Manila day", async () => {

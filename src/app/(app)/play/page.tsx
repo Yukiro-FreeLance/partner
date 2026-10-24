@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { categories } from "@/lib/content/catalog";
 import { getRepository } from "@/lib/data";
-import { listMySessions } from "@/lib/services/quiz";
+import { listRoundCards } from "@/lib/services/quiz";
 
 export const metadata = { title: "Play" };
 
@@ -25,7 +25,9 @@ const modes = [
 export default async function PlayPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
   const user = await requireUser();
-  const sessions = await listMySessions(await getRepository(), user.profile.id);
+  const cards = await listRoundCards(await getRepository(), user.profile.id);
+  const waiting = cards.filter((item) => item.partnerDone && item.mine?.status !== "completed");
+  const finished = cards.filter((item) => item.mine?.status === "completed");
   return (
     <main className="grid w-full gap-4 px-4 py-5 lg:px-8">
       <header>
@@ -56,7 +58,7 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
       </section>
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Intimacy and closeness</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">Optional questions for adults about emotional closeness, affection, comfort, and boundaries. Nothing here is explicit. Each answer stays private unless you choose to share that answer. You can skip any question.</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Optional questions for adults about emotional closeness, affection, comfort, and boundaries. Nothing here is explicit. Your answers are shared with your partner after you both finish. You can skip any question.</p>
         <form action={startQuizAction} className="mt-4 grid gap-3">
           <input type="hidden" name="mode" value="exchange" />
           <input type="hidden" name="size" value="8" />
@@ -68,10 +70,37 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
         </form>
       </section>
       <section>
+        <h2 className="font-serif text-2xl">Partner finished</h2>
+        <div className="mt-3 grid gap-2">
+          {waiting.map((item) => item.mine?.status === "in_progress" ? (
+            <Link key={item.round.id} className="rounded-2xl border bg-card px-4 py-3" href={`/play/quiz/${item.mine.id}`}>{item.round.title} · Continue to review</Link>
+          ) : (
+            <form key={item.round.id} action={startQuizAction} className="flex items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3">
+              <p className="text-sm">{item.round.title} · Your partner already finished</p>
+              <input type="hidden" name="mode" value={item.round.mode} />
+              <input type="hidden" name="title" value={item.round.title} />
+              <input type="hidden" name="size" value={item.round.size} />
+              {item.round.categories.map((category) => <input key={category} type="hidden" name="categories" value={category} />)}
+              {item.round.includeSensitive && <input type="hidden" name="includeSensitive" value="on" />}
+              {item.round.categories.includes("intimacy") && <input type="hidden" name="adult" value="on" />}
+              <Button type="submit">Play to review</Button>
+            </form>
+          ))}
+          {!waiting.length && <p className="text-sm text-muted-foreground">When your partner finishes a quiz first, it shows up here.</p>}
+        </div>
+      </section>
+      <section>
         <h2 className="font-serif text-2xl">In progress</h2>
         <div className="mt-3 grid gap-2">
-          {sessions.filter((item) => item.session.status === "in_progress").map((item) => <Link key={item.session.id} className="rounded-2xl border bg-card px-4 py-3" href={`/play/quiz/${item.session.id}`}>{item.round.title}</Link>)}
-          {sessions.every((item) => item.session.status !== "in_progress") && <p className="text-sm text-muted-foreground">Nothing waiting. Start whenever you like.</p>}
+          {cards.filter((item) => item.mine?.status === "in_progress").map((item) => <Link key={item.mine!.id} className="rounded-2xl border bg-card px-4 py-3" href={`/play/quiz/${item.mine!.id}`}>{item.round.title}{item.partnerDone ? " · Partner finished" : ""}</Link>)}
+          {cards.every((item) => item.mine?.status !== "in_progress") && <p className="text-sm text-muted-foreground">Nothing waiting. Start whenever you like.</p>}
+        </div>
+      </section>
+      <section>
+        <h2 className="font-serif text-2xl">Review</h2>
+        <div className="mt-3 grid gap-2">
+          {finished.map((item) => <Link key={item.round.id} className="rounded-2xl border bg-card px-4 py-3" href={`/play/results/${item.round.id}`}>{item.round.title}{item.partnerDone ? " · Both finished" : " · Waiting on your partner"}</Link>)}
+          {!finished.length && <p className="text-sm text-muted-foreground">Finished quizzes open here so you can review the answers.</p>}
         </div>
       </section>
       <p className="text-xs text-muted-foreground">Categories available: {categories.map((category) => category.name).join(", ")}.</p>

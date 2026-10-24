@@ -62,7 +62,7 @@ export async function notifyUser(
   if (!preferences?.emailNotifications) return;
   const profile = await repo.find("profiles", { eq: { id: input.userId } });
   if (!profile || profile.isDemo) return;
-  await sendNotice({ to: profile.email, subject: input.title, body: input.body, href: input.href });
+  void sendNotice({ to: profile.email, subject: input.title, body: input.body, href: input.href });
 }
 
 export async function assertRateLimit(repo: Repository, key: string, limit: number, windowMs: number) {

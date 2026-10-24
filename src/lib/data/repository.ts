@@ -29,6 +29,21 @@ export interface Repository {
   updateWhere<T extends TableName>(table: T, where: Where<Row<T>>, patch: Partial<Row<T>>): Promise<Row<T> | null>;
   remove<T extends TableName>(table: T, id: string): Promise<void>;
   removeWhere<T extends TableName>(table: T, where: Where<Row<T>>): Promise<number>;
+  transaction<T>(work: (repo: Repository) => Promise<T>): Promise<T>;
+}
+
+const openTransactions = new WeakSet<object>();
+
+export async function runWrite<T>(repo: Repository, work: (repo: Repository) => Promise<T>): Promise<T> {
+  if (openTransactions.has(repo)) return work(repo);
+  return repo.transaction(async (tx) => {
+    openTransactions.add(tx);
+    try {
+      return await work(tx);
+    } finally {
+      openTransactions.delete(tx);
+    }
+  });
 }
 
 export function rowKey(table: TableName, row: object) {

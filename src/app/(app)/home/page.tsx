@@ -47,14 +47,20 @@ export default async function HomePage() {
   const couple = membership ? await repo.find("couples", { eq: { id: membership.coupleId } }) : null;
   const partnerMember = membership ? await otherPartner(repo, membership.coupleId, user.profile.id) : null;
   const partner = partnerMember ? await repo.find("profiles", { eq: { id: partnerMember.userId } }) : null;
-  const report = membership ? await getConnectionReport(repo, user.profile.id) : null;
-  const sessions = await listMySessions(repo, user.profile.id);
+  const [report, sessions, memories, invites, notes, challenges, personality] = await Promise.all([
+    membership ? getConnectionReport(repo, user.profile.id) : Promise.resolve(null),
+    listMySessions(repo, user.profile.id),
+    membership ? repo.list("coupleMemories", { eq: { coupleId: membership.coupleId } }) : Promise.resolve([]),
+    membership ? repo.list("coupleInvitations", { eq: { coupleId: membership.coupleId, status: "pending" } }) : Promise.resolve([]),
+    repo.list("notifications", { eq: { userId: user.profile.id } }),
+    repo.list("coupleChallenges", { eq: { isActive: true } }),
+    repo.list("personalityResults", { eq: { userId: user.profile.id } }),
+  ]);
   const resume = sessions.find((item) => item.session.status === "in_progress");
-  const memories = membership ? await repo.list("coupleMemories", { eq: { coupleId: membership.coupleId } }) : [];
-  const invites = membership ? await repo.list("coupleInvitations", { eq: { coupleId: membership.coupleId, status: "pending" } }) : [];
-  const notes = (await repo.list("notifications", { eq: { userId: user.profile.id } })).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
-  const challenges = (await repo.list("coupleChallenges", { eq: { isActive: true } })).filter((item) => item.cadence === "weekly").slice(0, 2);
-  const personality = (await repo.list("personalityResults", { eq: { userId: user.profile.id } })).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const latestReview = sessions.find((item) => item.session.status === "completed");
+  const recentNotes = [...notes].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  const weeklyChallenges = challenges.filter((item) => item.cadence === "weekly").slice(0, 2);
+  const personalitySnapshot = [...personality].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const started = couple?.relationshipStartedOn ?? user.profile.relationshipStartedOn;
   const daysTogether = started ? Math.max(differenceInCalendarDays(new Date(), parseISO(started)), 0) : null;
   const todayRound = membership ? (await repo.list("quizRounds", { eq: { coupleId: membership.coupleId, mode: "daily" } })).find((round) => dayKey(new Date(round.createdAt)) === dayKey(new Date())) : null;
@@ -122,18 +128,18 @@ export default async function HomePage() {
                 <ScoreRing value={report?.mine.score ?? null} label="Your Score" detail={report?.mine.eligible ? `${report.mine.correct}/${report.mine.eligible} matched` : "Not enough answers yet"} />
                 <ScoreRing value={report?.partnerKnowledge?.score ?? null} label="Partner's Score" detail={report?.partnerKnowledge?.eligible ? `${report.partnerKnowledge.correct}/${report.partnerKnowledge.eligible} matched` : "Waiting on their round"} />
               </div>
-              <Link href="/connection" className="mt-3 inline-flex min-h-11 items-center text-sm text-primary">View Details</Link>
+              <Link href={latestReview ? `/play/results/${latestReview.round.id}` : "/play"} className="mt-3 inline-flex min-h-11 items-center text-sm text-primary">View Details</Link>
             </article>
             <article className="panel p-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-serif text-2xl">Your Personality Snapshot</h2>
                 <Link href="/personality" className="text-sm text-primary">View Details</Link>
               </div>
-              {personality ? (
+              {personalitySnapshot ? (
                 <div className="mt-4 grid gap-3">
-                  <p className="text-sm text-muted-foreground">{personality.summary.split(". ")[0]}.</p>
+                  <p className="text-sm text-muted-foreground">{personalitySnapshot.summary.split(". ")[0]}.</p>
                   {snapshotOrder.map(([key, label]) => {
-                    const value = personality.scores[key];
+                    const value = personalitySnapshot.scores[key];
                     if (typeof value !== "number") return null;
                     return (
                       <div key={key}>
@@ -151,13 +157,13 @@ export default async function HomePage() {
           <section className="hidden gap-4 lg:grid lg:grid-cols-3">
             <article className="panel p-5">
               <div className="flex items-center justify-between"><h2 className="font-serif text-2xl">Upcoming Challenges</h2><Link href="/play" className="text-sm text-primary">View All</Link></div>
-              {challenges.map((challenge) => (
+              {weeklyChallenges.map((challenge) => (
                 <div key={challenge.id} className="mt-3 rounded-2xl bg-secondary p-3">
                   <p className="text-sm font-medium">{challenge.title}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{challenge.description}</p>
                 </div>
               ))}
-              {!challenges.length && <p className="mt-3 text-sm text-muted-foreground">Weekly challenges show up here. Missing a day does not take points away.</p>}
+              {!weeklyChallenges.length && <p className="mt-3 text-sm text-muted-foreground">Weekly challenges show up here. Missing a day does not take points away.</p>}
             </article>
             <article className="panel p-5">
               <div className="flex items-center justify-between"><h2 className="font-serif text-2xl">Today&apos;s Question</h2><Link href="/play/daily" className="text-sm text-primary">View All</Link></div>
@@ -200,7 +206,7 @@ export default async function HomePage() {
           </section>
           <section className="panel hidden p-5 lg:block">
             <div className="flex items-center justify-between"><h2 className="font-serif text-2xl">Recent Activity</h2><Link href="/notifications" className="text-sm text-primary">View All</Link></div>
-            <ActivityList notes={notes} />
+            <ActivityList notes={recentNotes} />
           </section>
           <section className="panel hidden p-5 lg:block">
             <h2 className="font-serif text-2xl">Quick Actions</h2>

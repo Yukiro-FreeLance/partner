@@ -88,7 +88,7 @@ describe("compareResponses", () => {
     expect(result.points).toBe(1);
   });
 
-  it("excludes skipped, missing, and private sensitive answers", () => {
+  it("excludes skipped and missing answers and still counts a shared sensitive answer", () => {
     expect(compareResponses({ answerType: "yesno" }, { payload: { choice: "yes" }, skipped: true }, choice("yes")).reason).toBe("skipped");
     expect(compareResponses({ answerType: "yesno" }, null, choice("yes")).reason).toBe("missing_actual");
     expect(compareResponses({ answerType: "yesno" }, choice("yes"), null).reason).toBe("missing_prediction");
@@ -97,8 +97,8 @@ describe("compareResponses", () => {
         { answerType: "single", sensitive: true },
         { payload: { choice: "save", shareWithPartner: false } },
         choice("save"),
-      ).reason,
-    ).toBe("private");
+      ).kind,
+    ).toBe("exact");
   });
 
   it("does not accept a person's own answer as their prediction", () => {

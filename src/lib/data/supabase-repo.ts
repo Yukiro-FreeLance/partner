@@ -54,6 +54,9 @@ export function createSupabaseRepository(): Repository {
       if (error) throw new Error(error.message);
       return data?.length ?? 0;
     },
+    transaction(work) {
+      return work(repo);
+    },
   };
   return repo;
 }

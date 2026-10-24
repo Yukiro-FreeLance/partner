@@ -10,7 +10,14 @@ import { ensureContent, ensureDemo, ensureOperator } from "@/lib/demo/seed";
 
 const filePath = path.join(dataDir(), "db.json");
 const blobPath = "couplesync/db.json";
-const store = globalThis as { __couplesyncRepo?: Promise<Repository>; __couplesyncQueue?: Promise<unknown>; __couplesyncShared?: Repository };
+const readCacheMs = 1500;
+const store = globalThis as {
+  __couplesyncRepo?: Promise<Repository>;
+  __couplesyncQueue?: Promise<unknown>;
+  __couplesyncShared?: Repository;
+  __couplesyncBlob?: { memory: ReturnType<typeof createMemoryRepository>; loadedAt: number };
+  __couplesyncBlobLoad?: Promise<ReturnType<typeof createMemoryRepository>>;
+};
 store.__couplesyncQueue ??= Promise.resolve();
 
 function locked<T>(work: () => Promise<T>) {
@@ -101,23 +108,42 @@ async function loadPrepared() {
   return { memory };
 }
 
+async function blobMemory() {
+  const cached = store.__couplesyncBlob;
+  if (cached && Date.now() - cached.loadedAt < readCacheMs) return cached.memory;
+  store.__couplesyncBlobLoad ??= loadPrepared()
+    .then(({ memory }) => {
+      store.__couplesyncBlob = { memory, loadedAt: Date.now() };
+      return memory;
+    })
+    .finally(() => {
+      store.__couplesyncBlobLoad = undefined;
+    });
+  return store.__couplesyncBlobLoad;
+}
+
+function rememberBlob(memory: ReturnType<typeof createMemoryRepository>) {
+  store.__couplesyncBlob = { memory, loadedAt: Date.now() };
+}
+
 function sharedRepository(): Repository {
   async function mutate<T>(change: (memory: ReturnType<typeof createMemoryRepository>) => Promise<T>) {
     return locked(async () => {
       const { memory } = await loadPrepared();
       const result = await change(memory);
       await writeBlobDatabase(memory.snapshot());
+      rememberBlob(memory);
       return result;
     });
   }
-  return {
+  const repo: Repository = {
     kind: "memory",
     async list(table, where, options) {
-      const { memory } = await loadPrepared();
+      const memory = await blobMemory();
       return memory.list(table, where, options);
     },
     async find(table, where) {
-      const { memory } = await loadPrepared();
+      const memory = await blobMemory();
       return memory.find(table, where);
     },
     async insert(table, row) {
@@ -139,7 +165,51 @@ function sharedRepository(): Repository {
     async removeWhere(table, where) {
       return mutate((memory) => memory.removeWhere(table, where));
     },
+    async transaction(work) {
+      return locked(async () => {
+        const { memory } = await loadPrepared();
+        const tracked = trackWrites(memory);
+        const result = await work(tracked.repo);
+        if (tracked.written()) await writeBlobDatabase(memory.snapshot());
+        rememberBlob(memory);
+        return result;
+      });
+    },
   };
+  return repo;
+}
+
+function trackWrites(memory: Repository) {
+  const state = { dirty: false };
+  const repo: Repository = {
+    kind: memory.kind,
+    list: (table, where, options) => memory.list(table, where, options),
+    find: (table, where) => memory.find(table, where),
+    async insert(table, row) {
+      state.dirty = true;
+      return memory.insert(table, row);
+    },
+    async update(table, id, patch) {
+      state.dirty = true;
+      return memory.update(table, id, patch);
+    },
+    async updateWhere(table, where, patch) {
+      state.dirty = true;
+      return memory.updateWhere(table, where, patch);
+    },
+    async remove(table, id) {
+      state.dirty = true;
+      await memory.remove(table, id);
+    },
+    async removeWhere(table, where) {
+      state.dirty = true;
+      return memory.removeWhere(table, where);
+    },
+    transaction(work) {
+      return work(repo);
+    },
+  };
+  return { repo, written: () => state.dirty };
 }
 
 export function getLocalRepository() {
@@ -209,6 +279,14 @@ function wrap(memory: ReturnType<typeof createMemoryRepository>): Repository {
         const count = await memory.removeWhere(table, where);
         await persist();
         return count;
+      });
+    },
+    async transaction(work) {
+      return locked(async () => {
+        const tracked = trackWrites(memory);
+        const result = await work(tracked.repo);
+        if (tracked.written()) await persist();
+        return result;
       });
     },
   };

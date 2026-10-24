@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/feedback";
 import { Textarea } from "@/components/ui/field";
-import { completeQuizAction, saveQuizAction } from "@/app/actions";
+import { finishQuizAction, saveQuizAction } from "@/app/actions";
 import type { AnswerPayload, AnswerType, QuestionConfig, QuizMode } from "@/lib/domain";
 
 export type PlayerQuestion = {
@@ -74,7 +74,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
     setPending(true);
     setError("");
     const current = drafts[step.question.id] ?? {};
-    const phaseDraft = current[step.phase] ?? draft;
+    const phaseDraft = sharedDraft(step.phase, current[step.phase] ?? draft);
     const result = await saveQuizAction({
       sessionId,
       questionId: step.question.id,
@@ -88,6 +88,24 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
       return false;
     }
     return true;
+  }
+
+  async function submitQuiz() {
+    setPending(true);
+    setError("");
+    const current = drafts[step.question.id] ?? {};
+    const phaseDraft = sharedDraft(step.phase, current[step.phase] ?? draft);
+    const result = await finishQuizAction({
+      sessionId,
+      questionId: step.question.id,
+      currentIndex: steps.length,
+      selfAnswer: step.phase === "self" ? phaseDraft : current.self ?? null,
+      prediction: step.phase === "guess" ? phaseDraft : current.guess ?? null,
+    });
+    if (result && "error" in result) {
+      setError(result.error);
+      setPending(false);
+    }
   }
 
   async function go(nextIndex: number) {
@@ -148,7 +166,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
           <h1 className="mt-3 font-serif text-3xl leading-tight">{prompt}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{choice ? "Choose one option" : "Answer in your own way"} · About {minutes} min{timerSeconds ? ` · ${seconds}s` : ""}</p>
         </div>
-        {step.question.sensitive && <p className="mt-4 text-center text-sm text-muted-foreground">This one is optional and private unless you turn on sharing. Skip it if you would rather not answer.</p>}
+        {step.question.sensitive && step.phase === "self" && <p className="mt-4 text-center text-sm text-muted-foreground">Your answer is shared with your partner after you both finish. Skip it if you would rather not answer.</p>}
         <div className="mt-6">
           <AnswerControl question={step.question} draft={draft} onChange={update} />
         </div>
@@ -170,7 +188,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
               <AlertDialogDescription className="mt-2 text-sm text-muted-foreground">You can review with Back before submitting. After this, the round follows its reveal rules.</AlertDialogDescription>
               <div className="mt-5 flex justify-end gap-2">
                 <AlertDialogCancel className="rounded-full border px-4 py-2">Keep editing</AlertDialogCancel>
-                <AlertDialogAction className="rounded-full bg-primary px-4 py-2 text-primary-foreground" onClick={async () => { const saved = await persist(steps.length); if (saved) await completeQuizAction(sessionId); }}>Submit answers</AlertDialogAction>
+                <AlertDialogAction className="rounded-full bg-primary px-4 py-2 text-primary-foreground" onClick={() => void submitQuiz()}>Submit answers</AlertDialogAction>
               </div>
             </AlertDialogContent>
           </AlertDialog>
@@ -202,15 +220,14 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
         {question.options.map((option) => {
           const selected = draft.payload.choice === option.value;
           return (
-            <button key={option.value} type="button" data-testid="quiz-option" aria-pressed={selected} onClick={() => onChange({ ...draft.payload, choice: option.value }, false)} className={`flex min-h-14 items-center gap-3 rounded-full border bg-white px-4 py-3 text-left transition ${type === "image" ? "flex-col rounded-3xl p-3" : ""} ${selected ? "border-primary shadow-[0_8px_24px_-16px_rgb(109_40_217_/_0.8)]" : "border-[#f1e7f6]"}`}>
+            <button key={option.value} type="button" data-testid="quiz-option" aria-pressed={selected} onClick={() => onChange({ ...draft.payload, choice: option.value, ...(question.sensitive ? { shareWithPartner: true } : {}) }, false)} className={`flex min-h-14 items-center gap-3 rounded-full border px-4 py-3 text-left transition ${type === "image" ? "flex-col rounded-3xl p-3" : ""} ${selected ? "border-primary bg-[#f3e8ff] ring-2 ring-primary shadow-[0_10px_28px_-16px_rgb(109_40_217)]" : "border-[#f1e7f6] bg-white"}`}>
               {option.imageUrl && <img src={option.imageUrl} alt="" className="h-24 w-full rounded-2xl object-cover" />}
-              {type !== "image" && <span className="size-4 shrink-0 rounded-full border border-white shadow-sm" style={{ background: swatch(option.label) }} aria-hidden />}
-              <span className="min-w-0 flex-1 font-medium">{option.label}</span>
-              {selected && <Check className="size-4 shrink-0 text-primary" aria-hidden />}
+              {type !== "image" && <span className={`size-5 shrink-0 rounded-full border-2 ${selected ? "border-primary bg-primary" : "border-[#e9d5ff] bg-white"}`} style={selected ? undefined : { background: swatch(option.label) }} aria-hidden />}
+              <span className={`min-w-0 flex-1 ${selected ? "font-semibold text-primary" : "font-medium"}`}>{option.label}</span>
+              {selected && <Check className="size-5 shrink-0 text-primary" aria-hidden />}
             </button>
           );
         })}
-        {question.sensitive && <ShareToggle draft={draft} onChange={onChange} />}
       </div>
     );
   }
@@ -220,7 +237,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
       <div className="grid gap-3">
         {question.options.map((option) => {
           const on = selected.has(option.value);
-          return <button key={option.value} type="button" aria-pressed={on} className={`min-h-14 rounded-2xl border px-4 py-3 text-left ${on ? "border-primary bg-secondary" : "bg-card"}`} onClick={() => { const next = new Set(selected); if (on) next.delete(option.value); else next.add(option.value); onChange({ ...draft.payload, choices: [...next] }, false); }}>{option.label}</button>;
+          return <button key={option.value} type="button" aria-pressed={on} className={`flex min-h-14 items-center gap-3 rounded-full border px-4 py-3 text-left ${on ? "border-primary bg-[#f3e8ff] font-semibold text-primary ring-2 ring-primary" : "border-[#f1e7f6] bg-white font-medium"}`} onClick={() => { const next = new Set(selected); if (on) next.delete(option.value); else next.add(option.value); onChange({ ...draft.payload, choices: [...next] }, false); }}><span className="min-w-0 flex-1">{option.label}</span>{on && <Check className="size-5 shrink-0 text-primary" aria-hidden />}</button>;
         })}
       </div>
     );
@@ -233,7 +250,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
       <div>
         <div className="flex justify-between text-xs text-muted-foreground"><span>{question.config.scaleLabels?.[0]}</span><span>{question.config.scaleLabels?.[1]}</span></div>
         <div className="mt-3 grid grid-cols-5 gap-2">
-          {values.map((value) => <button key={value} type="button" aria-pressed={draft.payload.scale === value} className={`h-12 rounded-2xl border ${draft.payload.scale === value ? "bg-primary text-primary-foreground" : "bg-card"}`} onClick={() => onChange({ scale: value }, false)}>{value}</button>)}
+          {values.map((value) => <button key={value} type="button" aria-pressed={draft.payload.scale === value} className={`h-12 rounded-2xl border font-semibold ${draft.payload.scale === value ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary" : "border-[#f1e7f6] bg-white"}`} onClick={() => onChange({ scale: value }, false)}>{value}</button>)}
         </div>
       </div>
     );
@@ -244,7 +261,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
       <div className="grid gap-3">
         {question.options.map((option) => {
           const place = ranking.indexOf(option.value);
-          return <button key={option.value} type="button" className="min-h-14 rounded-2xl border bg-card px-4 py-3 text-left" onClick={() => { const next = ranking.filter((value) => value !== option.value); if (place === -1) next.push(option.value); onChange({ ranking: next }, false); }}>{place >= 0 ? `${place + 1}. ` : ""}{option.label}</button>;
+          return <button key={option.value} type="button" aria-pressed={place >= 0} className={`min-h-14 rounded-full border px-4 py-3 text-left ${place >= 0 ? "border-primary bg-[#f3e8ff] font-semibold text-primary ring-2 ring-primary" : "border-[#f1e7f6] bg-white"}`} onClick={() => { const next = ranking.filter((value) => value !== option.value); if (place === -1) next.push(option.value); onChange({ ranking: next }, false); }}>{place >= 0 ? `${place + 1}. ` : ""}{option.label}</button>;
         })}
       </div>
     );
@@ -270,6 +287,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
   return <Textarea maxLength={question.config.maxLength ?? 500} placeholder={question.config.placeholder} value={draft.payload.text ?? ""} onChange={(event) => onChange({ text: event.target.value }, false)} />;
 }
 
-function ShareToggle({ draft, onChange }: { draft: Draft; onChange: (payload: AnswerPayload, skipped?: boolean) => void }) {
-  return <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(draft.payload.shareWithPartner)} onChange={(event) => onChange({ ...draft.payload, shareWithPartner: event.target.checked })} /> Share this sensitive answer with my partner</label>;
+function sharedDraft(phase: "self" | "guess", draft: Draft) {
+  if (phase !== "self" || draft.skipped) return draft;
+  return { ...draft, payload: { ...draft.payload, shareWithPartner: true } };
 }

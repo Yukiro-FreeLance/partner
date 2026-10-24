@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
 import { compareResponses, formatScore, SCORE_DISCLAIMER, summarize } from "@/lib/scoring";
 import { otherPartner } from "@/lib/services/access";
-import { getRoundResults, personalSummary } from "@/lib/services/quiz";
+import { getRoundResults } from "@/lib/services/quiz";
 
 export const metadata = { title: "Quiz results" };
 
@@ -19,7 +19,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
   const { round, session, summary, questions, partnerName } = results.data;
   const categories = await repo.list("questionCategories", {});
   const partner = await otherPartner(repo, round.coupleId, user.profile.id);
-  const partnerSummary = partner && round.resultsShared ? await personalSummary(repo, partner.userId, round.id) : null;
+  const partnerKnowledge = summarize(questions.flatMap((item) => {
+    if (!item.mine || !item.partnerPrediction || item.mine.skipped || item.partnerPrediction.skipped) return [];
+    return [compareResponses(item.question, { payload: item.mine.payload, skipped: false }, { payload: item.partnerPrediction.payload, skipped: false })];
+  }));
+  const storedPartnerSummary = partner && partnerKnowledge.eligible === 0 ? (await repo.list("scoreSnapshots", { eq: { userId: partner.userId, roundId: round.id } }))[0] ?? null : null;
+  const partnerScore = partnerKnowledge.eligible > 0 ? partnerKnowledge.score : storedPartnerSummary?.score ?? null;
+  const waiting = questions.filter((item) => item.myPrediction && !item.myPrediction.skipped && !item.partnerAnswer).length;
   const preference = summarize(questions.flatMap((item) => {
     if (!item.mine || !item.partnerAnswer || item.mine.skipped || item.partnerAnswer.skipped) return [];
     return [compareResponses(item.question, { payload: item.partnerAnswer.payload, skipped: false }, { payload: item.mine.payload, skipped: false })];
@@ -48,10 +54,17 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
   const starters = questions.filter((item) => item.comparison && item.comparison.eligible && item.comparison.points < 1).slice(0, 3);
 
   return (
-    <main className="mx-auto grid max-w-5xl gap-4 px-4 py-6">
+    <main className="grid w-full gap-4 px-4 py-6 lg:px-8">
       <p className="text-sm text-muted-foreground">{round.title}</p>
       <h1 className="font-serif text-4xl">What this round showed</h1>
-      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{summary.description} {SCORE_DISCLAIMER} A difference is a chance to learn, not a verdict about the relationship.</p>
+      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary.eligible > 0 ? `You matched ${summary.correct} of ${summary.eligible} scored guesses.` : waiting > 0 ? `${waiting} guess${waiting === 1 ? "" : "es"} ${waiting === 1 ? "is" : "are"} saved and waiting on ${partnerName ?? "your partner"}.` : summary.description} {SCORE_DISCLAIMER}</p>
+      {session?.status !== "completed" && (
+        <form action={startQuizAction} className="panel flex flex-wrap items-center justify-between gap-3 p-5">
+          <p className="text-sm">Your partner can already be finished. Add your answers to open the review.</p>
+          <input type="hidden" name="roundId" value={round.id} />
+          <Button type="submit">{session ? "Continue this quiz" : "Play this quiz"}</Button>
+        </form>
+      )}
       <section className="grid gap-4 lg:grid-cols-[220px_1fr]">
         <article className="panel p-5">
           <ScoreReveal score={summary.score == null ? null : Math.round(summary.score)} label={summary.label} />
@@ -60,19 +73,49 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
         <article className="panel p-5">
           <h2 className="font-serif text-2xl">How the guesses compared</h2>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <div className="rounded-2xl bg-secondary p-3"><dt>Matched</dt><dd className="font-serif text-2xl">{summary.correct}</dd></div>
-            <div className="rounded-2xl bg-secondary p-3"><dt>Close</dt><dd className="font-serif text-2xl">{summary.close}</dd></div>
-            <div className="rounded-2xl bg-secondary p-3"><dt>Different</dt><dd className="font-serif text-2xl">{summary.incorrect}</dd></div>
-            <div className="rounded-2xl bg-secondary p-3"><dt>Counted</dt><dd className="font-serif text-2xl">{summary.eligible}</dd></div>
+            <div className="rounded-2xl bg-emerald-50 p-3"><dt>Matched</dt><dd className="font-serif text-2xl text-emerald-700">{summary.correct}</dd></div>
+            <div className="rounded-2xl bg-amber-50 p-3"><dt>Close</dt><dd className="font-serif text-2xl text-amber-700">{summary.close}</dd></div>
+            <div className="rounded-2xl bg-rose-50 p-3"><dt>Different</dt><dd className="font-serif text-2xl text-rose-700">{summary.incorrect}</dd></div>
+            <div className="rounded-2xl bg-[#f3e8ff] p-3"><dt>Counted</dt><dd className="font-serif text-2xl text-primary">{summary.eligible}</dd></div>
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">Skipped, private, and written answers stay out of the percentage until they can be compared. Subjective preferences are not marked right or wrong. The percentage is how close a guess was to a visible answer.</p>
+          <p className="mt-3 text-xs text-muted-foreground">{waiting > 0 ? `${waiting} still waiting on ${partnerName ?? "your partner"}. ` : ""}Skipped and written answers stay out of the percentage until they can be compared. The percentage is how close a guess was to their finished answer.</p>
         </article>
+      </section>
+      <section>
+        <h2 className="font-serif text-2xl">Answer by answer</h2>
+        <ol className="mt-4 grid gap-3 lg:grid-cols-2">
+          {questions.map((item) => {
+            const mark = answerMark(item);
+            return (
+              <li key={item.question.id} className={`rounded-[1.75rem] border p-4 ${mark.card}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">{categories.find((category) => category.id === item.question.categoryId)?.name}</p>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mark.badge}`}>{mark.label}</span>
+                </div>
+                <p className="mt-2 font-medium leading-6">{item.question.selfPrompt}</p>
+                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">You said</dt><dd className="mt-1 font-medium">{item.mineLabel}</dd></div>
+                  <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">You guessed</dt><dd className="mt-1 font-medium">{item.predictionLabel ?? "No guess yet"}</dd></div>
+                  <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">{partnerName ?? "Partner"} said</dt><dd className="mt-1 font-medium">{item.partnerLabel ?? "Waiting on their finished answer"}</dd></div>
+                </dl>
+                {item.comparison?.reason === "unscored_text" && (
+                  <form action={similarityAction} className="mt-3 flex flex-wrap gap-2">
+                    <input type="hidden" name="questionId" value={item.question.id} />
+                    <Button name="mark" value="similar" variant="outline" size="sm">Similar</Button>
+                    <Button name="mark" value="partial" variant="outline" size="sm">Partly similar</Button>
+                    <Button name="mark" value="different" variant="outline" size="sm">Different</Button>
+                  </form>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       </section>
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="panel p-5">
           <h2 className="font-serif text-2xl">You and {partnerName ?? "your partner"}</h2>
           <p className="mt-2 text-sm">Your prediction accuracy: {formatScore(summary.score)}</p>
-          <p className="text-sm">{partnerSummary ? `${partnerName ?? "Your partner"}'s prediction accuracy: ${formatScore(partnerSummary.score)}` : "Their score appears after they finish and the reveal rules allow it."}</p>
+          <p className="text-sm">{partnerScore != null ? `${partnerName ?? "Your partner"}'s prediction accuracy: ${formatScore(partnerScore)}` : `${partnerName ?? "Your partner"}'s score appears after they finish a guess about you.`}</p>
           <p className="mt-3 text-sm">Preference alignment: {formatScore(preference.score)}. {preference.description}</p>
           {previous != null && summary.score != null && <p className="mt-3 text-sm text-muted-foreground">Your earlier counted rounds averaged {previous}%. This round is {Math.round(summary.score)}%.</p>}
         </article>
@@ -93,29 +136,6 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
           <ul className="mt-3 flex flex-wrap gap-2">{achievements.map((item) => <li key={item.id} className="rounded-full bg-secondary px-3 py-1 text-xs">{catalog.find((achievement) => achievement.id === item.achievementId)?.name}</li>)}</ul>
           {!achievements.length && <p className="mt-2 text-sm text-muted-foreground">Finish a round to earn the first badge.</p>}
         </article>
-      </section>
-      <section className="panel p-5">
-        <h2 className="font-serif text-2xl">Review answers</h2>
-        <ol className="mt-4 grid gap-3">
-          {questions.map((item) => (
-            <li key={item.question.id} className="rounded-3xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">{categories.find((category) => category.id === item.question.categoryId)?.name}</p>
-              <p className="font-medium">{item.question.selfPrompt}</p>
-              <p className="mt-2 text-sm">You said: {item.mineLabel}</p>
-              {item.predictionLabel && <p className="text-sm">Your guess: {item.predictionLabel}</p>}
-              {item.partnerLabel ? <p className="text-sm">{partnerName ?? "Partner"} answered: {item.partnerLabel}</p> : <p className="text-sm text-muted-foreground">Their answer is not visible yet.</p>}
-              {item.comparison && <p className="mt-2 text-xs text-muted-foreground">{item.comparison.eligible ? `${Math.round(item.comparison.points * 100)}% · ${item.comparison.reason}` : item.comparison.reason === "unscored_text" ? "Written answers stay unscored until you mark them." : "Not counted."}</p>}
-              {item.comparison?.reason === "unscored_text" && (
-                <form action={similarityAction} className="mt-3 flex flex-wrap gap-2">
-                  <input type="hidden" name="questionId" value={item.question.id} />
-                  <Button name="mark" value="similar" variant="outline" size="sm">Similar</Button>
-                  <Button name="mark" value="partial" variant="outline" size="sm">Partly similar</Button>
-                  <Button name="mark" value="different" variant="outline" size="sm">Different</Button>
-                </form>
-              )}
-            </li>
-          ))}
-        </ol>
       </section>
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Share a card</h2>
@@ -141,4 +161,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
       </div>
     </main>
   );
+}
+
+function answerMark(item: { partnerAnswer: { skipped: boolean } | null; myPrediction: { skipped: boolean } | null; comparison: { eligible: boolean; points: number } | null }) {
+  if (!item.partnerAnswer) return { label: "Waiting", badge: "bg-[#f3e8ff] text-primary", card: "border-[#f1e7f6] bg-white" };
+  if (item.partnerAnswer.skipped || item.myPrediction?.skipped) return { label: "Skipped", badge: "bg-secondary text-muted-foreground", card: "border-[#f1e7f6] bg-white" };
+  if (item.comparison?.eligible && item.comparison.points === 1) return { label: "Matched", badge: "bg-emerald-100 text-emerald-800", card: "border-emerald-200 bg-[#f3fff8]" };
+  if (item.comparison?.eligible && item.comparison.points > 0) return { label: "Close", badge: "bg-amber-100 text-amber-900", card: "border-amber-200 bg-[#fffaf0]" };
+  if (item.comparison?.eligible) return { label: "Different", badge: "bg-rose-100 text-rose-800", card: "border-rose-200 bg-[#fff5f8]" };
+  return { label: "Saved", badge: "bg-secondary text-primary", card: "border-[#f1e7f6] bg-white" };
 }

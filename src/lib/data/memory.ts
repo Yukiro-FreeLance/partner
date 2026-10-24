@@ -108,6 +108,9 @@ export function createMemoryRepository(initial?: Database): Repository & { snaps
     snapshot() {
       return structuredClone(db);
     },
+    transaction(work) {
+      return work(repo);
+    },
   };
 
   return repo;
