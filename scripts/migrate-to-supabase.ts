@@ -147,7 +147,7 @@ async function main() {
   if (fromTable) {
     for (const key of Object.keys(copied) as (keyof Database)[]) {
       if (key === fromTable) break;
-      copied[key] = [] as Database[typeof key];
+      (copied as Record<keyof Database, unknown[]>)[key] = [];
     }
   }
   const profileIds = new Set(database.profiles.map((profile) => profile.id));
