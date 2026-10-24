@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { BlobNotFoundError, get, put } from "@vercel/blob";
+import { blobTokenOptions } from "@/lib/blob-auth";
 import { dataDir } from "@/lib/data/paths";
 
 const blobPrefix = "couplesync/uploads/";
@@ -19,6 +20,7 @@ export async function storeMediaFile(id: string, bytes: Buffer, contentType: str
       allowOverwrite: true,
       contentType,
       cacheControlMaxAge: 60,
+      ...blobTokenOptions(),
     });
     return pathname;
   }
@@ -32,7 +34,7 @@ export async function storeMediaFile(id: string, bytes: Buffer, contentType: str
 export async function readMediaFile(storagePath: string) {
   if (storagePath.startsWith(blobPrefix)) {
     try {
-      const loaded = await get(storagePath, { access: "private", useCache: false });
+      const loaded = await get(storagePath, { access: "private", ...blobTokenOptions() });
       if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return null;
       return Buffer.from(await new Response(loaded.stream).arrayBuffer());
     } catch (error) {

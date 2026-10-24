@@ -1,7 +1,8 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
-import { BlobNotFoundError, get, put } from "@vercel/blob";
+import { BlobNotFoundError, get, head, put } from "@vercel/blob";
+import { blobTokenOptions } from "@/lib/blob-auth";
 import type { Database, Row, TableName } from "@/lib/domain";
 import { emptyDatabase, createMemoryRepository } from "@/lib/data/memory";
 import type { Repository } from "@/lib/data/repository";
@@ -66,13 +67,25 @@ async function writeDatabase(db: Database) {
 
 async function readBlobDatabase(): Promise<{ db: Database; etag: string | null }> {
   try {
-    const loaded = await get(blobPath, { access: "private", useCache: false });
+    const loaded = await get(blobPath, { access: "private", ...blobTokenOptions() });
     if (!loaded || loaded.statusCode !== 200 || !loaded.stream) return { db: emptyDatabase(), etag: null };
     const raw = await new Response(loaded.stream).text();
     return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: loaded.blob.etag };
   } catch (error) {
     if (error instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
-    throw error;
+    console.error("Blob read failed", error instanceof Error ? error.message : "unknown error", "token", Boolean(process.env.BLOB_READ_WRITE_TOKEN), "store", Boolean(process.env.BLOB_STORE_ID));
+    try {
+      const info = await head(blobPath, blobTokenOptions());
+      const response = await fetch(info.downloadUrl);
+      if (response.status === 404) return { db: emptyDatabase(), etag: null };
+      if (!response.ok) throw error;
+      const raw = await response.text();
+      return { db: { ...emptyDatabase(), ...JSON.parse(raw) } as Database, etag: info.etag };
+    } catch (fallbackError) {
+      if (fallbackError instanceof BlobNotFoundError) return { db: emptyDatabase(), etag: null };
+      console.error("Blob metadata read failed", fallbackError instanceof Error ? fallbackError.message : "unknown error");
+      throw error;
+    }
   }
 }
 
@@ -83,6 +96,7 @@ async function writeBlobDatabase(db: Database) {
     allowOverwrite: true,
     contentType: "application/json",
     cacheControlMaxAge: 60,
+    ...blobTokenOptions(),
   });
   return saved.etag;
 }
