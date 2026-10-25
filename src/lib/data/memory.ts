@@ -46,6 +46,13 @@ export function emptyDatabase(): Database {
     supportMessages: [],
     mediaObjects: [],
     siteSettings: [],
+    cycleProfiles: [],
+    cyclePeriods: [],
+    cycleCheckIns: [],
+    cyclePregnancyLogs: [],
+    cycleReminders: [],
+    cycleEvents: [],
+    cycleShareGrants: [],
   };
 }
 

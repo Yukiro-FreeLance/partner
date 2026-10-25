@@ -203,6 +203,8 @@ export async function exportAccount(repo: Repository, userId: string) {
   const visibleMemoriesOnly = memories.filter((memory) => memory.authorId === userId || memory.visibility === "shared");
   const personality = await repo.list("personalityResults", { eq: { userId } });
   const notifications = await repo.list("notifications", { eq: { userId } });
+  const { exportCycleData } = await import("@/lib/services/cycle");
+  const cycle = await exportCycleData(repo, userId);
   await writeAudit(repo, userId, "account.exported");
   return {
     exportedAt: now(),
@@ -212,8 +214,9 @@ export async function exportAccount(repo: Repository, userId: string) {
     predictions,
     memories: visibleMemoriesOnly,
     personality,
+    cycle,
     notifications: notifications.map(({ title, body, type, createdAt, href }) => ({ title, body, type, createdAt, href })),
-    note: "This file contains your own answers. A partner's answer is included only when you already had permission to see it through a reveal, and only your copy of shared memories is included.",
+    note: "This file contains your own answers and your private cycle records. A partner's answer is included only when you already had permission to see it through a reveal, and only your copy of shared memories is included.",
   };
 }
 
@@ -223,6 +226,8 @@ export async function deleteAccount(repo: Repository, userId: string) {
     const { leaveCouple } = await import("@/lib/services/couples");
     await leaveCouple(repo, userId);
   }
+  const { deleteCycleData } = await import("@/lib/services/cycle");
+  await deleteCycleData(repo, userId);
   const tables = ["userAnswers", "answerPredictions", "personalityAnswers", "personalityResults", "personalitySessions", "cardActivity", "savedQuestions", "notifications", "userAchievements", "reports", "emailTokens", "loginAttempts"] as const;
   for (const table of tables) {
     const key = table === "reports" ? "reporterId" : table === "emailTokens" || table === "loginAttempts" ? null : "userId";

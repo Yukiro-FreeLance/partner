@@ -74,6 +74,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       )}
       <section className="grid h-fit gap-3 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)]">
         <h2 className="font-serif text-2xl">Your data</h2>
+        <a className="text-sm underline" href="/cycle/settings">Cycle privacy, reminders, export, and deletion</a>
         <a className="text-sm underline" href="/api/account/export">Download a copy of your data</a>
         <form action={deleteAccountAction} className="grid gap-2">
           <Label htmlFor="confirmName">Type your display name to delete the account</Label>

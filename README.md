@@ -38,6 +38,9 @@ Set `AUTH_SECRET` before running a production build that does not use Supabase. 
 | `SUPER_ADMIN_EMAILS` | Non-demo emails for the super admin role. Demo addresses are ignored |
 | `SUPER_ADMIN_PASSWORD` | Local mode only. Creates the operator profile the first time that email is missing |
 | `DEMO_PASSWORD` | Password for the fictional seed couple. At least 8 characters. They stay non-admin members |
+| `CYCLE_PREDICTION_PROVIDER` | `local` by default. Set to `apiverve` only after reviewing `docs/cycle-tracker.md` |
+| `CYCLE_PREDICTION_API_KEY` | Server-only key for the optional calculator. Never prefix it with `NEXT_PUBLIC_` |
+| `CYCLE_PREDICTION_API_URL` | Optional override. Defaults to the APIVerve menstrual cycle endpoint |
 | `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | Set to `true` after Google is enabled in Supabase |
 
 Supabase mode turns on only when the URL, a public key, and the service role key are all set. The browser receives the public key. Server actions check membership before they read or write couple data. Row Level Security is a second boundary for the Data API.
@@ -55,7 +58,8 @@ Supabase mode turns on only when the URL, a public key, and the service role key
    - `https://your-domain/reset-password`
 5. Enable email/password. Enable Google only if you want it, then set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`.
 6. Confirm the private Storage bucket `private-media` exists. The migration creates it when the `storage` schema is present. Uploads are limited to JPEG, PNG, WEBP, GIF, and common audio types, at 5 MB for images and 8 MB for audio.
-7. Copy the project URL, anon or publishable key, and service role key into `.env.local` or the host’s environment.
+7. Run `supabase/migrations/20261025193000_cycle_tracker.sql` after the earlier migrations if the cycle tracker should use Supabase. `supabase db push` applies every file in order.
+8. Copy the project URL, anon or publishable key, and service role key into `.env.local` or the host’s environment.
 
 Then load the catalog:
 
@@ -85,7 +89,8 @@ Local mode stores a bcrypt password hash and an httpOnly `cs_session` cookie. Su
 - Private answers are not readable through the Data API until a reveal row exists for that viewer.
 - Sensitive answers also need `shareWithPartner` in the payload.
 - Personality answers stay with the owner. A result is visible to a partner only when `shared` is true.
-- Administrators can read reports and the question catalog. Policies do not grant them private answers, notes, memories, or personality results.
+- Cycle records are visible to the owner through the Data API. A partner does not receive periods, check-ins, pregnancy logs, or reminders. Sharing goes through an explicit grant the server can revoke.
+- Administrators can read reports and the question catalog. Policies do not grant them private answers, notes, memories, personality results, or cycle records.
 - `credentials`, `email_tokens`, and `login_attempts` have no Data API policies.
 
 The application server still checks membership itself. Do not trust a couple id sent by the browser.
@@ -137,6 +142,12 @@ This workspace has not been deployed.
 6. Smoke test register, email verification, create couple, accept invite, answer a quiz, and open the connection page.
 
 Do not put `SUPABASE_SERVICE_ROLE_KEY` or `RESEND_API_KEY` in a `NEXT_PUBLIC_` variable. Private routes send `noindex`. The landing page, sitemap, robots file, manifest, and Open Graph image are public.
+
+## Cycle tracker
+
+Open **Cycle** after signing in. Log period start dates, a daily check-in, and optional intimacy notes. Predictions are calendar estimates, not a diagnosis or a confirmation of ovulation or pregnancy. Nothing is shared with a partner until you turn on a category in Cycle, then Privacy, and, for daily notes, choose a share level on that day. Invitation codes do not carry cycle data. Export and permanent deletion are on the cycle privacy page and in the account export.
+
+The fictional demo profile Maya Chen receives sample cycle entries so the screens can be explored. Those rows are not created for real accounts. Jordan does not see them unless a share is turned on. Details, the optional APIVerve calculator, and the database migration are in `docs/cycle-tracker.md`.
 
 ## Product notes
 

@@ -3,6 +3,8 @@ import { superAdminEmails } from "@/lib/config";
 import type { UserPreferences } from "@/lib/domain";
 import type { Repository } from "@/lib/data/repository";
 import { achievements, categories, challenges, conversationCards, personalityQuestions, personalityTests, questionOptions, questions, quizTemplates } from "@/lib/content/catalog";
+import { calendarDay } from "@/lib/cycle/dates";
+import { fictionalCycleSample } from "@/lib/cycle/sample";
 import { createId, stableId } from "@/lib/ids";
 import { acceptInvitation, createCouple } from "@/lib/services/couples";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
@@ -79,9 +81,27 @@ async function demoPasswordHash() {
   return hash(createId(), 12);
 }
 
+export async function ensureDemoCycle(repo: Repository) {
+  const maya = await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } });
+  if (!maya?.isDemo) return;
+  const existing = await repo.list("cyclePeriods", { eq: { userId: maya.id } }, { limit: 1 });
+  if (existing.length) return;
+  const membership = await repo.find("coupleMembers", { eq: { userId: maya.id, status: "active" } });
+  const sample = fictionalCycleSample(maya.id, calendarDay("Asia/Manila"), new Date().toISOString());
+  if (membership) sample.event.coupleId = membership.coupleId;
+  const profile = await repo.find("cycleProfiles", { eq: { userId: maya.id } });
+  if (!profile) await repo.insert("cycleProfiles", sample.profile);
+  for (const period of sample.periods) await repo.insert("cyclePeriods", period);
+  for (const entry of sample.checkIns) await repo.insert("cycleCheckIns", entry);
+  await repo.insert("cycleEvents", sample.event);
+}
+
 export async function ensureDemo(repo: Repository) {
   await ensureContent(repo);
-  if (await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } })) return;
+  if (await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } })) {
+    await ensureDemoCycle(repo);
+    return;
+  }
   const stamp = new Date().toISOString();
   const passwordHash = await demoPasswordHash();
   const mayaId = stableId(DEMO_MAYA_EMAIL);
@@ -201,6 +221,7 @@ export async function ensureDemo(repo: Repository) {
     readAt: null,
     createdAt: stamp,
   });
+  await ensureDemoCycle(repo);
 }
 
 export async function ensureOperator(repo: Repository) {
@@ -284,6 +305,14 @@ export async function resetDemo(repo: Repository) {
     await repo.remove("couples", coupleId);
   }
   for (const id of ids) {
+    await repo.removeWhere("cyclePeriods", { eq: { userId: id } });
+    await repo.removeWhere("cycleCheckIns", { eq: { userId: id } });
+    await repo.removeWhere("cyclePregnancyLogs", { eq: { userId: id } });
+    await repo.removeWhere("cycleReminders", { eq: { userId: id } });
+    await repo.removeWhere("cycleEvents", { eq: { userId: id } });
+    await repo.removeWhere("cycleShareGrants", { eq: { ownerId: id } });
+    await repo.removeWhere("cycleShareGrants", { eq: { partnerId: id } });
+    if (await repo.find("cycleProfiles", { eq: { userId: id } })) await repo.remove("cycleProfiles", id);
     await repo.removeWhere("personalitySessions", { eq: { userId: id } });
     await repo.removeWhere("personalityAnswers", { eq: { userId: id } });
     await repo.removeWhere("personalityResults", { eq: { userId: id } });

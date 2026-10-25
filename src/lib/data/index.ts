@@ -3,7 +3,8 @@ import { isSupabaseConfigured } from "@/lib/config";
 import { getLocalRepository } from "@/lib/data/local";
 import type { Repository } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-store";
-import { ensureContent, ensureOperator } from "@/lib/demo/seed";
+import { ensureContent, ensureDemoCycle, ensureOperator } from "@/lib/demo/seed";
+import { isMissingCycleTable } from "@/lib/cycle/errors";
 
 const staff = globalThis as { __couplesyncStaffReady?: Promise<void> };
 
@@ -13,6 +14,11 @@ export async function getRepository(): Promise<Repository> {
     const sample = await repo.list("questions", {}, { limit: 1 });
     if (sample.length === 0) await ensureContent(repo);
     await ensureOperator(repo);
+    try {
+      await ensureDemoCycle(repo);
+    } catch (error) {
+      if (!isMissingCycleTable(error)) throw error;
+    }
   })().then(
     () => undefined,
     (error) => {

@@ -197,6 +197,23 @@ export async function leaveCouple(repo: Repository, userId: string): Promise<Res
   for (const invitation of pending) {
     if (invitation.createdBy === userId) await repo.update("coupleInvitations", invitation.id, { status: "revoked" });
   }
+  const ownedGrants = await repo.list("cycleShareGrants", { eq: { ownerId: userId } });
+  const receivedGrants = await repo.list("cycleShareGrants", { eq: { partnerId: userId } });
+  for (const grant of [...ownedGrants, ...receivedGrants]) {
+    if (!grant.revokedAt) await repo.update("cycleShareGrants", grant.id, { revokedAt: now() });
+  }
+  const cycleProfile = await repo.find("cycleProfiles", { eq: { userId } });
+  if (cycleProfile) {
+    await repo.update("cycleProfiles", userId, {
+      sharePeriodSummary: false,
+      shareFertileSummary: false,
+      shareMoodSummary: false,
+      shareSymptomSummary: false,
+      shareIntimacySummary: false,
+      shareSelectedDetails: false,
+      updatedAt: now(),
+    });
+  }
   await writeAudit(repo, userId, "couple.left", membership.coupleId);
   return ok({ coupleId: membership.coupleId });
 }

@@ -3,6 +3,7 @@ import type { Database, Row, TableName } from "@/lib/domain";
 const PRIMARY_KEYS: Partial<Record<TableName, string>> = {
   credentials: "userId",
   userPreferences: "userId",
+  cycleProfiles: "userId",
 };
 
 export function primaryKey(table: TableName) {

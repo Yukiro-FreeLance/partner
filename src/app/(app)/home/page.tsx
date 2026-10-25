@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from "date-fns";
-import { Brain, Gamepad2, Heart, ImageIcon, Play } from "lucide-react";
+import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play } from "lucide-react";
 import { resetDemoAction } from "@/app/actions";
 import { BannerUpload } from "@/components/banner-upload";
 import { Avatar } from "@/components/ui/feedback";
@@ -72,6 +72,7 @@ export default async function HomePage() {
     ["/personality", "Personality Lab", "Explore personalities, communication styles, and love languages.", "Take Test", Brain, "bg-[#eee9ff]"],
     ["/connection", "Our Connection", "Compare your answers, find shared interests, and discover new things.", "View Insights", Heart, "bg-[#ffe8f1]"],
     ["/memories", "Our Story", "Save milestones, memories, and your future dreams together.", "Open Timeline", ImageIcon, "bg-[#e7f1ff]"],
+    ["/cycle", "Cycle Tracker", "Follow your cycle and share only what you choose.", "Open tracker", CalendarHeart, "bg-[#fde7f3]"],
   ] as const;
 
   return (

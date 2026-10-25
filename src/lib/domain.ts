@@ -530,6 +530,120 @@ export type SiteSettings = {
   updatedAt: string;
 };
 
+export type CycleVisibility = "private" | "summary" | "selected";
+
+export type CycleEventVisibility = "private" | "summary" | "selected" | "shared";
+
+export type CycleProfile = {
+  userId: string;
+  timeZone: string;
+  typicalCycleLength: number;
+  typicalPeriodLength: number;
+  lutealLength: number;
+  externalEstimateConsent: boolean;
+  sharePeriodSummary: boolean;
+  shareFertileSummary: boolean;
+  shareMoodSummary: boolean;
+  shareSymptomSummary: boolean;
+  shareIntimacySummary: boolean;
+  shareSelectedDetails: boolean;
+  periodReminder: boolean;
+  periodLeadDays: number;
+  checkInReminder: boolean;
+  checkInHour: number;
+  fertileReminder: boolean;
+  pregnancyTestReminder: boolean;
+  missedCheckInReminder: boolean;
+  sampleData: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CyclePeriod = {
+  id: string;
+  userId: string;
+  startedOn: string;
+  endedOn: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CycleCheckIn = {
+  id: string;
+  userId: string;
+  day: string;
+  symptoms: string[];
+  customSymptoms: string[];
+  mood: string | null;
+  energy: number | null;
+  sexDrive: string | null;
+  bleeding: string | null;
+  cervicalMucus: string | null;
+  sleepQuality: number | null;
+  stressLevel: number | null;
+  wellnessNote: string | null;
+  moment: string | null;
+  notes: string | null;
+  affection: number | null;
+  emotionalCloseness: number | null;
+  intimacyPreference: string | null;
+  comfort: number | null;
+  readiness: number | null;
+  sexualActivity: string | null;
+  contraception: string | null;
+  shareLevel: CycleVisibility;
+  sharedFields: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CyclePregnancyLog = {
+  id: string;
+  userId: string;
+  testedOn: string;
+  result: "positive" | "negative" | "invalid" | "not_taken";
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CycleReminder = {
+  id: string;
+  userId: string;
+  kind: "medication" | "custom";
+  title: string;
+  hour: number;
+  enabled: boolean;
+  nextRunOn: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CycleEvent = {
+  id: string;
+  userId: string;
+  coupleId: string | null;
+  day: string;
+  title: string;
+  body: string | null;
+  visibility: CycleEventVisibility;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CycleShareScope = "period_summary" | "fertile_summary" | "mood_summary" | "symptom_summary" | "intimacy_summary" | "selected_details";
+
+export type CycleShareGrant = {
+  id: string;
+  ownerId: string;
+  partnerId: string;
+  coupleId: string;
+  scope: CycleShareScope;
+  grantedAt: string;
+  revokedAt: string | null;
+};
+
 export type MediaObject = {
   id: string;
   ownerId: string;
@@ -585,6 +699,13 @@ export type Database = {
   supportMessages: SupportMessage[];
   mediaObjects: MediaObject[];
   siteSettings: SiteSettings[];
+  cycleProfiles: CycleProfile[];
+  cyclePeriods: CyclePeriod[];
+  cycleCheckIns: CycleCheckIn[];
+  cyclePregnancyLogs: CyclePregnancyLog[];
+  cycleReminders: CycleReminder[];
+  cycleEvents: CycleEvent[];
+  cycleShareGrants: CycleShareGrant[];
 };
 
 export type TableName = keyof Database;
