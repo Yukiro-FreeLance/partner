@@ -75,7 +75,7 @@ export function SiteFooter() {
           <p className="mt-3 max-w-sm text-sm leading-6 text-white/85">More questions. Deeper conversations. A stronger us. Sample stories on this site are fictional.</p>
         </div>
         <div className="flex flex-col gap-4 md:items-end">
-          <Button asChild variant="secondary"><Link href="/register">Start Your Couple Journey</Link></Button>
+          <Button asChild variant="secondary" className="bg-white text-primary hover:bg-white/90"><Link href="/register">Start Your Couple Journey</Link></Button>
           <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Footer">
             {footerLinks.map(([label, href]) => (
               <Link key={href} href={href} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{label}</Link>

@@ -127,7 +127,7 @@ export default async function HomePage() {
                 <Link href="/connection" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white bg-white/80 px-5 text-sm font-medium"><Heart className="size-4 text-rose" aria-hidden />View Our Connection</Link>
               </div>
             </div>
-            <p className="absolute top-8 right-8 z-10 font-serif text-lg text-white italic drop-shadow-sm">Better together</p>
+            <img src="/brand/better-together.png" alt="Better together" className="absolute top-6 right-6 z-10 h-12 w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]" />
           </BannerUpload>
           <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {features.map((feature) => (

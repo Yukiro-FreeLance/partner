@@ -36,6 +36,50 @@ export function CoupleScene() {
   );
 }
 
+function SampleDevice({ children, label, tone, className }: { children: React.ReactNode; label: string; tone: "light" | "black"; className?: string }) {
+  const black = tone === "black";
+  return (
+    <div className={cn("flex w-[10rem] flex-col overflow-hidden rounded-[1.7rem] border-[5px] shadow-[0_22px_40px_-18px_rgba(0,0,0,0.45)] sm:w-[11rem]", black ? "border-black bg-black text-white" : "border-[#f4f0f8] bg-white text-[#2e2440]", className)}>
+      <p className="sr-only">{label}</p>
+      <div className={cn("mx-auto mt-1.5 h-1 w-9 rounded-full", black ? "bg-white/25" : "bg-black/10")} aria-hidden />
+      <div className="p-2.5">{children}</div>
+    </div>
+  );
+}
+
+export function HeroPhones({ tone = "light" }: { tone?: "light" | "black" }) {
+  const black = tone === "black";
+  const colors = ["Blue", "Pink", "Purple", "Yellow", "Black"];
+  return (
+    <div className="flex items-end">
+      <SampleDevice tone={tone} label="Sample home screen. Illustration only, not a customer result." className="z-10">
+        <p className={cn("text-[9px]", black ? "text-white/55" : "text-[#8b849c]")}>Good morning</p>
+        <p className="font-serif text-[13px] leading-tight">A sample couple</p>
+        <div className={cn("mt-2 rounded-xl p-2", black ? "bg-white/10" : "bg-[#f4f0ff]")}>
+          <p className={cn("text-[9px]", black ? "text-white/60" : "text-[#8b849c]")}>Knowledge score <span className={cn("rounded-full px-1.5", black ? "bg-emerald-400/20 text-emerald-300" : "bg-emerald-100 text-emerald-700")}>Example</span></p>
+          <p className="font-serif text-xl leading-none">77.5%</p>
+          <div className={cn("mt-1.5 h-1.5 rounded-full", black ? "bg-white/15" : "bg-white")} aria-hidden><div className="h-1.5 w-[77%] rounded-full bg-emerald-500" /></div>
+        </div>
+        <div className="mt-2 grid gap-1">
+          {["Partner Quiz", "Personality Lab", "Our Connection"].map((item) => (
+            <p key={item} className={cn("rounded-lg px-2 py-1 text-[10px]", black ? "bg-white/8 text-white/90" : "bg-[#faf7ff]")}>{item}</p>
+          ))}
+        </div>
+      </SampleDevice>
+      <SampleDevice tone={tone} label="Sample partner quiz screen." className="z-20 -ml-5 w-[10.4rem] sm:w-[11.4rem]">
+        <p className={cn("text-[8px] font-semibold tracking-[0.14em] uppercase", black ? "text-[#e9d5ff]" : "text-primary")}>Partner Quiz</p>
+        <p className="mt-1 font-serif text-[12px] leading-snug">What is your partner&apos;s favorite color?</p>
+        <div className="mt-2 grid gap-1">
+          {colors.map((color) => (
+            <p key={color} className={cn("rounded-full px-2 py-1 text-[10px]", color === "Blue" ? (black ? "bg-primary text-white" : "border border-primary bg-[#f3e8ff]") : black ? "bg-white/8" : "border border-[#efe7f6] bg-white")}>{color}</p>
+          ))}
+        </div>
+        <p className="mt-2 rounded-full bg-primary py-1.5 text-center text-[11px] font-medium text-white">Next</p>
+      </SampleDevice>
+    </div>
+  );
+}
+
 export function HeroHomeScreen() {
   return (
     <div className="grid gap-2 text-[11px] leading-tight text-foreground">
