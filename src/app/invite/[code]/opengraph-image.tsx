@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getRepository } from "@/lib/data";
+import { siteHost } from "@/lib/site-origin";
 import { previewInvitation } from "@/lib/services/couples";
 
 export const size = { width: 1200, height: 630 };
@@ -10,6 +11,7 @@ export default async function Image({ params }: { params: Promise<{ code: string
   const { code } = await params;
   const repo = await getRepository();
   const preview = await previewInvitation(repo, decodeURIComponent(code));
+  const host = await siteHost();
   const name = preview.ok ? preview.data.inviter.displayName : "your partner";
   const space = preview.ok ? preview.data.couple.name : "A private couple space";
   return new ImageResponse(
@@ -32,7 +34,7 @@ export default async function Image({ params }: { params: Promise<{ code: string
           <div style={{ display: "flex", marginTop: 16, fontSize: 76, fontWeight: 700, lineHeight: 1.05 }}>Pair with {name}</div>
           <div style={{ display: "flex", marginTop: 20, fontSize: 36 }}>{space}</div>
         </div>
-        <div style={{ display: "flex", fontSize: 28 }}>sync.wendev.site</div>
+        <div style={{ display: "flex", fontSize: 28 }}>{host}</div>
       </div>
     ),
     size,

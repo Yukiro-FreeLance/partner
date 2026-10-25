@@ -8,15 +8,15 @@ import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
 import { runWrite } from "@/lib/data/repository";
 import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, resendVerification, resetPassword, verifyEmailToken } from "@/lib/auth/accounts";
-import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
+import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, getCurrentUser, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
 import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
 import { pauseCycleSharing } from "@/lib/services/cycle";
-import { acceptInvitation, createCouple, createInvitation, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
+import { acceptInvitation, createCouple, createInvitation, invitationKey, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
 import { completeQuiz, getOrCreateDaily, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
-import { writeAudit } from "@/lib/services/access";
+import { activeMembership, couplePartners, writeAudit } from "@/lib/services/access";
 import { saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
 import { addReflection, adminStats, blockUser, createCustomCard, createCustomQuestion, createMemory, deleteAccount, deleteMemory, fileReport, markSimilarity, reviewReport, saveAdminQuestion, saveCardState, updateMemory } from "@/lib/services/life";
 import type { AnswerPayload, QuizMode } from "@/lib/domain";
@@ -175,19 +175,35 @@ export async function createCoupleAction(_state: FormState, formData: FormData):
 }
 
 export async function previewInviteAction(formData: FormData) {
-  await requireUser();
-  const code = formString(formData, "code").trim();
+  const code = invitationKey(formString(formData, "code"));
   if (!code) redirect("/join");
-  redirect(`/invite/${encodeURIComponent(code)}`);
+  const path = `/invite/${encodeURIComponent(code)}`;
+  const user = await getCurrentUser();
+  if (!user) {
+    await rememberPairPath(path);
+    redirect(`/login?next=${encodeURIComponent(path)}`);
+  }
+  redirect(path);
 }
 
 export async function confirmPairAction(formData: FormData) {
   const user = await requireUser();
-  const code = formString(formData, "code").trim();
+  const code = invitationKey(formString(formData, "code"));
   const repo = await getRepository();
   const joined = await acceptInvitation(repo, user.profile.id, code);
   if (!joined.ok) redirect(`/invite/${encodeURIComponent(code)}?error=${encodeURIComponent(joined.error)}`);
+  await consumePairPath();
   redirect("/home");
+}
+
+export async function pairingStatusAction() {
+  const user = await getCurrentUser();
+  if (!user) return { paired: false };
+  const repo = await getRepository();
+  const membership = await activeMembership(repo, user.profile.id);
+  if (!membership) return { paired: false };
+  const partners = await couplePartners(repo, membership.coupleId);
+  return { paired: partners.length >= 2 };
 }
 
 export async function regenerateInviteAction() {
@@ -206,6 +222,7 @@ export async function joinCoupleAction(_state: FormState, formData: FormData): P
   const repo = await getRepository();
   const joined = await acceptInvitation(repo, user.profile.id, formString(formData, "code"));
   if (!joined.ok) return { error: joined.error };
+  await consumePairPath();
   redirect("/home");
 }
 

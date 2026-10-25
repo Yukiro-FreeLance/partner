@@ -15,7 +15,7 @@ export const PAIR_COOKIE = "cs_pair";
 export function safePairPath(value: string | null | undefined) {
   if (!value) return null;
   let path = value.trim();
-  if (!path || path.length > 200) return null;
+  if (!path || path.length > 512) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) {
     try {
       path = new URL(path).pathname;
@@ -37,8 +37,12 @@ export async function rememberPairPath(value: string | null | undefined) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 30,
+    maxAge: 60 * 60 * 24,
   });
+}
+
+export async function peekPairPath() {
+  return safePairPath((await cookies()).get(PAIR_COOKIE)?.value);
 }
 
 export async function consumePairPath() {

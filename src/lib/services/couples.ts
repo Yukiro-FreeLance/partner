@@ -112,10 +112,39 @@ export async function revokeInvitation(repo: Repository, userId: string, invitat
   return ok(updated);
 }
 
-export async function previewInvitation(repo: Repository, codeOrToken: string) {
-  const value = codeOrToken.trim();
+export function invitationKey(value: string) {
+  let trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    if (/^https?:\/\//i.test(trimmed)) {
+      const segment = new URL(trimmed).pathname.split("/").filter(Boolean).at(-1);
+      if (segment) trimmed = decodeURIComponent(segment);
+    }
+  } catch {
+    // Keep the typed value when it is not a full URL.
+  }
+  const marker = "/invite/";
+  const index = trimmed.toLowerCase().indexOf(marker);
+  if (index >= 0) {
+    const segment = trimmed.slice(index + marker.length).split(/[?#]/)[0] ?? "";
+    try {
+      trimmed = decodeURIComponent(segment);
+    } catch {
+      trimmed = segment;
+    }
+  }
+  return trimmed.trim();
+}
+
+async function findInvitation(repo: Repository, codeOrToken: string) {
+  const value = invitationKey(codeOrToken);
+  if (!value) return null;
   const byCode = await repo.find("coupleInvitations", { eq: { code: value.toUpperCase() } });
-  const invitation = byCode ?? (await repo.find("coupleInvitations", { eq: { token: value } }));
+  return byCode ?? (await repo.find("coupleInvitations", { eq: { token: value } }));
+}
+
+export async function previewInvitation(repo: Repository, codeOrToken: string) {
+  const invitation = await findInvitation(repo, codeOrToken);
   if (!invitation) return fail("That invitation is invalid.");
   const current = await expireIfNeeded(repo, invitation);
   if (current.status === "expired") return fail("This invitation has expired. Ask your partner for a new one.");
@@ -127,24 +156,63 @@ export async function previewInvitation(repo: Repository, codeOrToken: string) {
   return ok({ invitation: current, couple, inviter });
 }
 
+async function ensureCoupleMember(repo: Repository, coupleId: string, userId: string) {
+  const current = await activeMembership(repo, userId);
+  if (current?.coupleId === coupleId) return ok({ coupleId });
+  if (current) return fail("Leave your current couple before joining another one.");
+  const partners = await couplePartners(repo, coupleId);
+  if (partners.length >= 2) return fail("This couple already has two partners.");
+  try {
+    await repo.insert("coupleMembers", {
+      id: createId(),
+      coupleId,
+      userId,
+      status: "active",
+      joinedAt: now(),
+      leftAt: null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/only one active couple/i.test(message)) return fail("Leave your current couple before joining another one.");
+    if (/only two active partners/i.test(message)) return fail("This couple already has two partners.");
+    return fail("Pairing could not be finished. Open the invitation again.");
+  }
+  return ok({ coupleId });
+}
+
 export async function acceptInvitation(repo: Repository, userId: string, codeOrToken: string): Promise<Result<{ coupleId: string }>> {
+  const located = await findInvitation(repo, codeOrToken);
+  if (!located) return fail("That invitation is invalid.");
+  if (located.createdBy === userId) {
+    const partners = await couplePartners(repo, located.coupleId);
+    if (partners.length >= 2) return ok({ coupleId: located.coupleId });
+    return fail("You cannot accept your own invitation.");
+  }
+  const alreadyHere = await activeMembership(repo, userId);
+  if (alreadyHere?.coupleId === located.coupleId) return ok({ coupleId: located.coupleId });
+  if (located.status === "accepted" && located.acceptedBy === userId) {
+    return ensureCoupleMember(repo, located.coupleId, userId);
+  }
+
   const preview = await previewInvitation(repo, codeOrToken);
   if (!preview.ok) return preview;
   const { invitation, inviter } = preview.data;
-  if (invitation.createdBy === userId) return fail("You cannot accept your own invitation.");
   if (await isBlocked(repo, userId, inviter.id)) return fail("This invitation cannot be accepted.");
   const existing = await activeMembership(repo, userId);
   if (existing) return fail("Leave your current couple before joining another one.");
   const partners = await couplePartners(repo, invitation.coupleId);
   if (partners.length >= 2) return fail("This couple already has two partners.");
-  if (partners.some((partner) => partner.userId === userId)) return fail("You already belong to this couple.");
 
   const claimed = await repo.updateWhere(
     "coupleInvitations",
     { eq: { id: invitation.id, status: "pending" } },
     { status: "accepted", acceptedBy: userId, acceptedAt: now() },
   );
-  if (!claimed) return fail("This invitation has already been used.");
+  if (!claimed) {
+    const latest = await repo.find("coupleInvitations", { eq: { id: invitation.id } });
+    if (latest?.acceptedBy === userId) return ensureCoupleMember(repo, invitation.coupleId, userId);
+    return fail("This invitation has already been used.");
+  }
 
   const room = await couplePartners(repo, invitation.coupleId);
   if (room.length >= 2) {
@@ -152,14 +220,11 @@ export async function acceptInvitation(repo: Repository, userId: string, codeOrT
     return fail("This couple already has two partners.");
   }
 
-  await repo.insert("coupleMembers", {
-    id: createId(),
-    coupleId: invitation.coupleId,
-    userId,
-    status: "active",
-    joinedAt: now(),
-    leftAt: null,
-  });
+  const joined = await ensureCoupleMember(repo, invitation.coupleId, userId);
+  if (!joined.ok) {
+    await repo.update("coupleInvitations", invitation.id, { status: "pending", acceptedBy: null, acceptedAt: null });
+    return joined;
+  }
   const joiner = await repo.find("profiles", { eq: { id: userId } });
   await notifyUser(repo, {
     userId: inviter.id,

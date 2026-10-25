@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { confirmPairAction } from "@/app/actions";
 import { SiteHeader } from "@/components/site";
 import { Avatar } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/auth/session";
-import { siteUrl } from "@/lib/config";
+import { consumePairPath, getCurrentUser } from "@/lib/auth/session";
+import { siteOrigin } from "@/lib/site-origin";
 import { getRepository } from "@/lib/data";
 import { activeMembership } from "@/lib/services/access";
-import { previewInvitation } from "@/lib/services/couples";
+import { acceptInvitation, previewInvitation } from "@/lib/services/couples";
 
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
   const { code } = await params;
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   const description = preview.ok
     ? `${preview.data.inviter.displayName} invited you to the private couple space ${preview.data.couple.name}.`
     : "A private invitation to pair on CoupleSync.";
-  const url = `${siteUrl()}/invite/${encodeURIComponent(code)}`;
+  const url = `${await siteOrigin()}/invite/${encodeURIComponent(code)}`;
   return {
     title,
     description,
@@ -32,10 +33,20 @@ export default async function InvitePage({ params, searchParams }: { params: Pro
   const { code } = await params;
   const { error } = await searchParams;
   const repo = await getRepository();
-  const preview = await previewInvitation(repo, decodeURIComponent(code));
+  const inviteCode = decodeURIComponent(code);
+  const preview = await previewInvitation(repo, inviteCode);
   const user = await getCurrentUser();
   const membership = user ? await activeMembership(repo, user.profile.id) : null;
   const returnPath = `/invite/${encodeURIComponent(code)}`;
+  let pairError = error;
+  if (user) {
+    const joined = await acceptInvitation(repo, user.profile.id, inviteCode);
+    if (joined.ok) {
+      await consumePairPath();
+      redirect("/home");
+    }
+    if (joined.error !== "You cannot accept your own invitation.") pairError = joined.error;
+  }
   return (
     <>
       <SiteHeader />
@@ -56,8 +67,8 @@ export default async function InvitePage({ params, searchParams }: { params: Pro
                   <p className="text-sm">Couple space: {preview.data.couple.name}</p>
                 </div>
               </div>
-              <p className="mt-4 text-sm leading-6 text-muted-foreground">Pairing connects only these two accounts. If this is not your partner, leave this page and ask for a new invitation.</p>
-              {error && <p className="mt-4 text-sm text-destructive" role="alert">{error}</p>}
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">A signed-in account pairs as soon as this invitation opens. If this is not your partner, close the page before you sign in.</p>
+              {pairError && <p className="mt-4 text-sm text-destructive" role="alert">{pairError}</p>}
               {!user && (
                 <div className="mt-6 flex flex-col gap-3">
                   <Button asChild><Link href={`/login?next=${encodeURIComponent(returnPath)}`}>Sign in to continue</Link></Button>
@@ -68,7 +79,7 @@ export default async function InvitePage({ params, searchParams }: { params: Pro
               {user && user.profile.id !== preview.data.inviter.id && membership && <p className="mt-6 text-sm">You already belong to a couple space. Leave it before joining this one.</p>}
               {user && user.profile.id !== preview.data.inviter.id && !membership && (
                 <form action={confirmPairAction} className="mt-6 grid gap-3" data-testid="join-couple">
-                  <input type="hidden" name="code" value={code} />
+                  <input type="hidden" name="code" value={inviteCode} />
                   <Button type="submit">Accept invitation</Button>
                   <Button asChild variant="outline"><Link href="/join">This is not my partner</Link></Button>
                 </form>

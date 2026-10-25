@@ -21,7 +21,7 @@ export default async function CycleLayout({ children }: { children: React.ReactN
     }
   }
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-4 lg:px-8 lg:py-6">
+    <main className="grid w-full gap-4 px-4 py-4 lg:px-8 lg:py-6">
       <CycleNav mode={tracker ? "owner" : "partner"} />
       <OfflineNote />
       {setup ? <CycleSetup /> : children}

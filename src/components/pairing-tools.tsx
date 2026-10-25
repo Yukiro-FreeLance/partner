@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { pairingStatusAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 
 export function CopyInviteLink({ url }: { url: string }) {
@@ -44,8 +45,17 @@ export function ShareInviteLink({ url, coupleName }: { url: string; coupleName: 
 export function PairingWatch() {
   const router = useRouter();
   useEffect(() => {
-    const timer = window.setInterval(() => router.refresh(), 8000);
-    return () => window.clearInterval(timer);
+    let stopped = false;
+    async function check() {
+      const status = await pairingStatusAction();
+      if (!stopped && status.paired) router.push("/home");
+    }
+    void check();
+    const timer = window.setInterval(() => void check(), 4000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [router]);
-  return <p className="text-sm text-muted-foreground">This page updates when your partner joins, then opens your shared home.</p>;
+  return <p className="text-sm text-muted-foreground">When your partner opens this invitation, this page opens your shared home.</p>;
 }

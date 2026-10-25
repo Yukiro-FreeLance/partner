@@ -14,10 +14,7 @@ export function isGoogleAuthEnabled() {
   return process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true" && Boolean(supabaseUrl() && supabaseAnonKey());
 }
 
-const productionSite = "https://sync.wendev.site";
-
 export function siteUrl() {
-  if (process.env.VERCEL) return productionSite;
   return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 

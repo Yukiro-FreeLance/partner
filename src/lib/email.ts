@@ -1,5 +1,5 @@
 import "server-only";
-import { siteUrl } from "@/lib/config";
+import { siteHost, siteOrigin } from "@/lib/site-origin";
 
 export function resendApiKey() {
   const key = process.env.RESEND_API_KEY?.trim() ?? "";
@@ -10,25 +10,25 @@ export function isMailConfigured() {
   return Boolean(resendApiKey());
 }
 
-export function mailFrom() {
+export async function mailFrom() {
   const configured = process.env.EMAIL_FROM?.trim();
   if (configured) return configured;
-  return "wendevNoReply <noreply@wendev.site>";
+  const host = (await siteHost()).replace(/:\d+$/, "");
+  return `CoupleSync <noreply@${host}>`;
 }
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
-const brandHost = "https://sync.wendev.site";
-
-function renderEmail(input: { heading: string; body: string; url: string; action: string; note: string }) {
+function renderEmail(input: { heading: string; body: string; url: string; action: string; note: string; origin: string; host: string }) {
   const heading = escapeHtml(input.heading);
   const body = escapeHtml(input.body);
   const url = escapeHtml(input.url);
   const action = escapeHtml(input.action);
   const note = escapeHtml(input.note);
-  const logo = `${brandHost}/brand/logo.jpg`;
+  const host = escapeHtml(input.host);
+  const logo = `${escapeHtml(input.origin)}/brand/logo.jpg`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,7 +70,7 @@ function renderEmail(input: { heading: string; body: string; url: string; action
           </tr>
           <tr>
             <td style="padding:8px 32px 28px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#8a7f96;">
-              ${note}<br>sync.wendev.site
+              ${note}<br>${host}
             </td>
           </tr>
         </table>
@@ -89,7 +89,7 @@ export async function sendAppEmail(input: { to: string; subject: string; text: s
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: mailFrom(), to: [to], subject: input.subject, html: input.html, text: input.text }),
+      body: JSON.stringify({ from: await mailFrom(), to: [to], subject: input.subject, html: input.html, text: input.text }),
     });
     if (!response.ok) {
       const detail = await response.text();
@@ -105,7 +105,9 @@ export async function sendAppEmail(input: { to: string; subject: string; text: s
 }
 
 export async function sendAuthLink(input: { to: string; subject: string; intro: string; path: string }) {
-  const url = `${siteUrl()}${input.path}`;
+  const origin = await siteOrigin();
+  const host = await siteHost();
+  const url = `${origin}${input.path}`;
   const reset = /reset/i.test(input.subject);
   return sendAppEmail({
     to: input.to,
@@ -117,12 +119,16 @@ export async function sendAuthLink(input: { to: string; subject: string; intro: 
       url,
       action: reset ? "Choose a new password" : "Confirm email",
       note: "If you did not ask for this, you can ignore this email.",
+      origin,
+      host,
     }),
   });
 }
 
 export async function sendNotice(input: { to: string; subject: string; body: string; href?: string | null }) {
-  const url = input.href ? `${siteUrl()}${input.href}` : siteUrl();
+  const origin = await siteOrigin();
+  const host = await siteHost();
+  const url = input.href ? `${origin}${input.href}` : origin;
   return sendAppEmail({
     to: input.to,
     subject: input.subject,
@@ -133,6 +139,8 @@ export async function sendNotice(input: { to: string; subject: string; body: str
       url,
       action: "Open CoupleSync",
       note: "This email does not include quiz answers.",
+      origin,
+      host,
     }),
   });
 }

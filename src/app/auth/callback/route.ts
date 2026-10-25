@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { peekPairPath } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
@@ -8,5 +9,6 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
   }
-  return NextResponse.redirect(new URL("/onboarding", url.origin));
+  const pair = await peekPairPath();
+  return NextResponse.redirect(new URL(pair ?? "/onboarding", url.origin));
 }

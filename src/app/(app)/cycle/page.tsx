@@ -42,7 +42,7 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
       <header className="grid gap-2">
         <p className="text-xs font-semibold tracking-[0.16em] text-rose uppercase">Private to you</p>
         <h1 className="font-serif text-4xl text-[#4c1d95]">Cycle tracker</h1>
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{TRACKING_DISCLAIMER}</p>
+        <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{TRACKING_DISCLAIMER} Dates update from the periods you record. A partner sees a phase, a date, a symptom, a mood, sex drive, or a fertility estimate only after you turn that share on.</p>
       </header>
       <CycleStatus saved={query.saved} error={query.error} />
       {profile.sampleData && <p className="rounded-2xl bg-secondary px-4 py-3 text-sm">These entries are fictional sample data for Maya Chen. They are not a real health record.</p>}
@@ -58,25 +58,26 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
       )}
       {estimate.hasHistory && (
         <>
-          <section className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+          <section className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
             <div className="panel grid justify-items-center p-5">
               <CycleRing estimate={estimate} />
-              <p className="text-center text-sm">{PHASE_COPY[estimate.phase].title}</p>
-              <p className="text-center text-xs text-muted-foreground">{sourceLabel(estimate.source)} {confidenceLabel(estimate.confidence)}</p>
+              <p className="text-center font-serif text-2xl">{PHASE_COPY[estimate.phase].title}</p>
+              <p className="text-center text-xs leading-5 text-muted-foreground">{sourceLabel(estimate.source)} {confidenceLabel(estimate.confidence)}</p>
+              <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">The ring is the current cycle day. It moves when you record a new period start.</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Stat label="Cycle length" value={estimate.cycleLength ? `${estimate.cycleLength} days` : "—"} detail={estimate.cycleLengthSource === "history" ? "From recorded starts" : "From your setting"} />
-              <Stat label="Next period" value={estimate.nextPeriodStart ? formatDayShort(estimate.nextPeriodStart) : "—"} detail="Predicted" />
-              <Stat label="Period length" value={estimate.periodLength ? `${estimate.periodLength} days` : "—"} detail={estimate.periodLengthStatus === "confirmed" ? "Recorded" : "Predicted"} />
-              <Stat label={estimate.daysLate > 0 ? "Later than estimate" : "Days until period"} value={estimate.daysLate > 0 ? `${estimate.daysLate}` : `${estimate.daysUntilPeriod ?? "—"}`} detail={estimate.daysLate > 0 ? "Not a pregnancy conclusion" : "Predicted"} />
-              <Stat label="Fertile window" value={estimate.fertileStart && estimate.fertileEnd ? `${formatDayShort(estimate.fertileStart)} – ${formatDayShort(estimate.fertileEnd)}` : "—"} detail="Predicted" />
-              <Stat label="Ovulation" value={estimate.ovulationDate ? formatDayShort(estimate.ovulationDate) : "—"} detail="Predicted, not confirmed" />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Stat label="Cycle length" value={estimate.cycleLength ? `${estimate.cycleLength} days` : "—"} detail={estimate.cycleLengthSource === "history" ? "Average gap between recorded period starts. An estimate of your pattern, not a medical measurement." : "Using the cycle length in Privacy until more starts are recorded."} />
+              <Stat label="Next period" value={estimate.nextPeriodStart ? formatDayShort(estimate.nextPeriodStart) : "—"} detail="Predicted from recent starts. The date can move after the next recorded period." />
+              <Stat label="Period length" value={estimate.periodLength ? `${estimate.periodLength} days` : "—"} detail={estimate.periodLengthStatus === "confirmed" ? "Counted from the start and end dates you entered." : "Predicted from your typical period length until you record an end date."} />
+              <Stat label={estimate.daysLate > 0 ? "Later than estimate" : "Days until period"} value={estimate.daysLate > 0 ? `${estimate.daysLate}` : `${estimate.daysUntilPeriod ?? "—"}`} detail={estimate.daysLate > 0 ? "The predicted start has passed and no new period is recorded. That is not a pregnancy result." : "Days from today to the predicted start."} />
+              <Stat label="Fertile window" value={estimate.fertileStart && estimate.fertileEnd ? `${formatDayShort(estimate.fertileStart)} – ${formatDayShort(estimate.fertileEnd)}` : "—"} detail="A predicted range. It does not confirm ovulation or mark a day as safe." />
+              <Stat label="Ovulation" value={estimate.ovulationDate ? formatDayShort(estimate.ovulationDate) : "—"} detail="One predicted day inside the fertile window. It is not a confirmed ovulation." />
             </div>
           </section>
           <section className="panel p-5">
             <h2 className="font-serif text-2xl">{PHASE_COPY[estimate.phase].title} phase</h2>
             <p className="mt-2 text-sm leading-6">{PHASE_COPY[estimate.phase].body}</p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {(["menstrual", "follicular", "ovulation", "luteal"] as const).map((phase) => (
                 <article key={phase} className={phase === estimate.phase ? "rounded-3xl bg-[#fde7f3] p-4" : "rounded-3xl bg-[#faf5ff] p-4"}>
                   <h3 className="font-serif text-lg">{PHASE_COPY[phase].title}{phase === estimate.phase ? " · current estimate" : ""}</h3>
@@ -148,7 +149,7 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
 }
 
 function Stat({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <article className="panel p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-serif text-2xl">{value}</p><p className="text-xs text-muted-foreground">{detail}</p></article>;
+  return <article className="panel p-4"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 font-serif text-3xl">{value}</p><p className="mt-2 text-xs leading-5 text-muted-foreground">{detail}</p></article>;
 }
 
 function PeriodForm() {

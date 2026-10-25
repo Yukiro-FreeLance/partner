@@ -71,6 +71,8 @@ describe("couple pairing", () => {
     expect(accepted.ok).toBe(true);
     const again = await acceptInvitation(repo, "c", created.data.invitation.code);
     expect(again.ok).toBe(false);
+    const repeat = await acceptInvitation(repo, "b", `https://example.com/invite/${created.data.invitation.token}`);
+    expect(repeat.ok).toBe(true);
     const members = await repo.list("coupleMembers", { eq: { coupleId: created.data.couple.id, status: "active" } });
     expect(members.map((member) => member.userId).sort()).toEqual(["a", "b"]);
   });

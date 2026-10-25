@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from "date-fns";
-import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play } from "lucide-react";
+import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play, type LucideIcon } from "lucide-react";
 import { resetDemoAction } from "@/app/actions";
 import { BannerUpload } from "@/components/banner-upload";
 import { PartnerCycleCard } from "@/components/cycle/partner-panel";
@@ -84,15 +84,16 @@ export default async function HomePage() {
   } catch (error) {
     if (!isMissingCycleTable(error)) throw error;
   }
-  const features = [
-    ["/play", "Partner Quiz", "Guess what your partner answered and reveal together.", "Start Quiz", Gamepad2, "bg-[#f7e8ff]"],
-    ["/personality", "Personality Lab", "Explore personalities, communication styles, and love languages.", "Take Test", Brain, "bg-[#eee9ff]"],
-    ["/connection", "Our Connection", "Compare your answers, find shared interests, and discover new things.", "View Insights", Heart, "bg-[#ffe8f1]"],
-    ["/memories", "Our Story", "Save milestones, memories, and your future dreams together.", "Open Timeline", ImageIcon, "bg-[#e7f1ff]"],
-    tracks
-      ? ["/cycle", "Cycle Tracker", "Follow your cycle and share only what you choose.", "Open tracker", CalendarHeart, "bg-[#fde7f3]"]
-      : ["/cycle", "Partner cycle", "See the cycle details your partner chooses to share.", "View shared cycle", CalendarHeart, "bg-[#fde7f3]"],
-  ] as const;
+  const cycleFeature = tracks
+    ? { href: "/cycle", title: "Cycle Tracker", detail: "Follow your cycle and share only what you choose.", action: "Open tracker", icon: CalendarHeart, tone: "bg-[#fde7f3]" }
+    : { href: "/cycle", title: "Partner cycle", detail: "See the cycle details your partner chooses to share.", action: "View shared cycle", icon: CalendarHeart, tone: "bg-[#fde7f3]" };
+  const features: { href: string; title: string; detail: string; action: string; icon: LucideIcon; tone: string }[] = [
+    { href: "/play", title: "Partner Quiz", detail: "Guess what your partner answered and reveal together.", action: "Start Quiz", icon: Gamepad2, tone: "bg-[#f7e8ff]" },
+    { href: "/personality", title: "Personality Lab", detail: "Explore personalities, communication styles, and love languages.", action: "Take Test", icon: Brain, tone: "bg-[#eee9ff]" },
+    { href: "/connection", title: "Our Connection", detail: "Compare your answers, find shared interests, and discover new things.", action: "View Insights", icon: Heart, tone: "bg-[#ffe8f1]" },
+    { href: "/memories", title: "Our Story", detail: "Save milestones, memories, and your future dreams together.", action: "Open Timeline", icon: ImageIcon, tone: "bg-[#e7f1ff]" },
+    cycleFeature,
+  ];
 
   return (
     <main className="grid w-full gap-4 px-4 py-4 lg:px-8 lg:py-6">
@@ -129,12 +130,12 @@ export default async function HomePage() {
             <p className="absolute top-8 right-8 z-10 font-serif text-lg text-white italic drop-shadow-sm">Better together</p>
           </BannerUpload>
           <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {features.map(([href, title, detail, action, Icon, tone]) => (
-              <Link key={title} href={href} className={`flex min-h-36 flex-col rounded-[1.75rem] p-4 ${tone}`}>
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-white/80 text-primary"><Icon className="size-5" aria-hidden /></span>
-                <span className="mt-3 font-serif text-xl leading-tight">{title}</span>
-                <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{detail}</span>
-                <span className="mt-auto pt-3 text-sm font-medium text-primary">{action} →</span>
+            {features.map((feature) => (
+              <Link key={feature.title} href={feature.href} className={`flex min-h-36 flex-col rounded-[1.75rem] p-4 ${feature.tone}`}>
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-white/80 text-primary"><feature.icon className="size-5" aria-hidden /></span>
+                <span className="mt-3 font-serif text-xl leading-tight">{feature.title}</span>
+                <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{feature.detail}</span>
+                <span className="mt-auto pt-3 text-sm font-medium text-primary">{feature.action} →</span>
               </Link>
             ))}
           </section>

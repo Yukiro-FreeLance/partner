@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Montserrat, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
-import { siteUrl } from "@/lib/config";
+import { siteOrigin } from "@/lib/site-origin";
 import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 import "./globals.css";
 
@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const icon = [{ url: siteAssetUrl("favicon", settings.updatedAt), type: settings.faviconType ?? "image/jpeg" }];
   const apple = [{ url: siteAssetUrl("apple", settings.updatedAt), type: settings.appleIconType ?? settings.faviconType ?? "image/jpeg" }];
   return {
-    metadataBase: new URL(siteUrl()),
+    metadataBase: new URL(await siteOrigin()),
     title: { default: settings.title, template: `%s · ${settings.siteName}` },
     description: settings.description,
     applicationName: settings.siteName,

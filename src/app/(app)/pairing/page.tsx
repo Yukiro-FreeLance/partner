@@ -5,7 +5,7 @@ import { CreateCoupleForm, JoinForm } from "@/components/join-form";
 import { CopyInviteLink, PairingWatch, ShareInviteLink } from "@/components/pairing-tools";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
-import { siteUrl } from "@/lib/config";
+import { siteHost, siteOrigin } from "@/lib/site-origin";
 import { getRepository } from "@/lib/data";
 import { activeMembership, couplePartners } from "@/lib/services/access";
 
@@ -17,7 +17,7 @@ export default async function PairingPage() {
   const membership = await activeMembership(repo, user.profile.id);
   if (!membership) {
     return (
-      <main className="mx-auto grid w-full max-w-5xl items-start gap-6 px-4 py-6 lg:grid-cols-2 lg:px-8">
+      <main className="grid w-full items-start gap-6 px-4 py-6 lg:grid-cols-2 lg:px-8">
         <section className="h-fit rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
           <h1 className="font-serif text-4xl">Create a couple space</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">One private space. It can hold two people.</p>
@@ -39,9 +39,10 @@ export default async function PairingPage() {
     .filter((invite) => invite.expiresAt > now)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const invite = invites[0];
-  const link = invite ? `${siteUrl()}/invite/${invite.token}` : "";
+  const origin = await siteOrigin();
+  const link = invite ? `${origin}/invite/${invite.token}` : "";
   return (
-    <main className="mx-auto grid w-full max-w-6xl items-start gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1.2fr)_20rem] lg:px-8">
+    <main className="grid w-full items-start gap-6 px-4 py-6 xl:grid-cols-[minmax(0,1.4fr)_22rem] xl:px-8">
       <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
         <div className="bg-[linear-gradient(135deg,#4c1d95_0%,#7c3aed_48%,#e879f9_100%)] px-6 py-8 text-white">
           <p className="text-xs font-semibold tracking-[0.2em] uppercase">CoupleSync invitation</p>
@@ -73,7 +74,7 @@ export default async function PairingPage() {
         <section className="rounded-[1.75rem] bg-white p-6 text-center shadow-[var(--shadow)]">
           <h2 className="font-serif text-2xl">Scan to join</h2>
           <div className="mt-4"><InviteQr url={link} /></div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">The code opens {siteUrl().replace(/^https?:\/\//, "")}. Your partner confirms your profile before pairing is complete.</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">The code opens {await siteHost()}. When your partner is signed in and opens it, the two accounts pair and this page opens Home.</p>
         </section>
       )}
     </main>
