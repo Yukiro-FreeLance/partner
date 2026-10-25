@@ -82,19 +82,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <p className="font-serif text-xl">{view === "week" ? formatDay(cursor) : month.label}</p>
         <Link className="inline-flex min-h-11 items-center rounded-full border px-4 text-sm" href={`/cycle/calendar?view=${view}&cursor=${addDays(cursor, shift)}`}>Next</Link>
       </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+      <div className="grid gap-4">
       <CalendarLegend />
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="py-1">{day}</div>)}</div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell) => {
           const flags = flagsFor(cell.day, cell.inMonth);
           return (
-            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} aria-label={describeDay(cell.day, flags)} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-1 text-sm ${daySurface(flags)}`} aria-current={flags.selected ? "date" : undefined}>
+            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} aria-label={describeDay(cell.day, flags)} className={`flex min-h-[5.25rem] flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-1.5 text-sm ${daySurface(flags)}`} aria-current={flags.selected ? "date" : undefined}>
               <span className={flags.today ? "font-semibold text-primary" : ""}>{Number(cell.day.slice(-2))}</span>
               <DayIdentifiers flags={flags} />
             </Link>
           );
         })}
       </div>
+      </div>
+      <div className="grid gap-4">
       <section className="panel grid gap-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-serif text-2xl">{formatDay(cursor)}</h2>
@@ -142,6 +146,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           {shared.view.events.length === 0 && <li className="text-sm text-muted-foreground">No partner events are shared.</li>}
         </ul>
       </section>
+      </div>
+      </div>
     </div>
   );
 }

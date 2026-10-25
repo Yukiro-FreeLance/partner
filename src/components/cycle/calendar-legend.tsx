@@ -1,4 +1,4 @@
-import { CalendarHeart, CircleDashed, Droplets, Flower2, PenLine, Sparkles, type LucideIcon } from "lucide-react";
+import { CalendarHeart, CircleDashed, Droplets, PenLine, Sparkles, Sun, type LucideIcon } from "lucide-react";
 import { formatDay } from "@/lib/cycle/dates";
 
 export type CalendarFlags = {
@@ -18,10 +18,10 @@ type MarkKey = "confirmedPeriod" | "predictedPeriod" | "fertile" | "ovulation" |
 const marks: { key: MarkKey; label: string; detail: string; icon: LucideIcon; sample: string; iconClass: string }[] = [
   { key: "confirmedPeriod", label: "Recorded period", detail: "Dates you logged", icon: Droplets, sample: "bg-[#ffe4e6] text-[#9f1239]", iconClass: "text-[#9f1239]" },
   { key: "predictedPeriod", label: "Predicted period", detail: "Estimate only", icon: CircleDashed, sample: "border border-dashed border-[#e11d48] bg-white text-[#be123c]", iconClass: "text-[#be123c]" },
-  { key: "fertile", label: "Fertile window", detail: "Predicted estimate", icon: Sparkles, sample: "bg-white text-[#6d28d9] shadow-[inset_0_0_0_2px_#c4b5fd]", iconClass: "text-[#6d28d9]" },
-  { key: "ovulation", label: "Ovulation", detail: "Predicted, not confirmed", icon: Flower2, sample: "bg-[#f5f3ff] text-[#6d28d9]", iconClass: "text-[#6d28d9]" },
-  { key: "checkIn", label: "Check-in", detail: "A private day log", icon: PenLine, sample: "bg-white text-[#6d28d9]", iconClass: "text-[#6d28d9]" },
-  { key: "event", label: "Event", detail: "Something on this day", icon: CalendarHeart, sample: "bg-white text-[#7c3aed]", iconClass: "text-[#7c3aed]" },
+  { key: "fertile", label: "Fertile window", detail: "Predicted estimate", icon: Sparkles, sample: "bg-[#ede9fe] text-[#5b21b6]", iconClass: "text-[#5b21b6]" },
+  { key: "ovulation", label: "Ovulation", detail: "Predicted, not confirmed", icon: Sun, sample: "bg-[#ffedd5] text-[#c2410c]", iconClass: "text-[#c2410c]" },
+  { key: "checkIn", label: "Check-in", detail: "A private day log", icon: PenLine, sample: "bg-[#e0f2fe] text-[#0369a1]", iconClass: "text-[#0369a1]" },
+  { key: "event", label: "Event", detail: "Something on this day", icon: CalendarHeart, sample: "bg-[#fae8ff] text-[#a21caf]", iconClass: "text-[#a21caf]" },
 ];
 
 export function daySurface(flags: CalendarFlags) {
@@ -41,12 +41,16 @@ export function describeDay(day: string, flags: CalendarFlags) {
 
 export function DayIdentifiers({ flags }: { flags: CalendarFlags }) {
   const active = marks.filter((mark) => flags[mark.key]);
-  if (active.length === 0) return <span className="block h-3.5" />;
+  if (active.length === 0) return <span className="block h-5" />;
   return (
-    <span className="flex flex-wrap items-center justify-center gap-0.5">
+    <span className="flex max-w-full flex-wrap items-center justify-center gap-0.5">
       {active.map((mark) => {
         const Icon = mark.icon;
-        return <Icon key={mark.key} className={`size-3.5 ${mark.iconClass}`} aria-hidden />;
+        return (
+          <span key={mark.key} title={mark.label} className={`flex size-5 shrink-0 items-center justify-center rounded-md ${mark.sample}`}>
+            <Icon className="size-3.5" strokeWidth={2.5} aria-hidden />
+          </span>
+        );
       })}
     </span>
   );
@@ -79,13 +83,13 @@ export function CalendarLegend({ audience = "owner" }: { audience?: "owner" | "p
   return (
     <section aria-label="Calendar key" className="panel p-4">
       <h2 className="font-serif text-lg">Calendar key</h2>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
         {visible.map((mark) => {
           const Icon = mark.icon;
           return (
             <li key={mark.key} className="flex min-h-11 items-center gap-3 rounded-2xl bg-[#faf7ff] px-3 py-2">
               <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${mark.sample}`} aria-hidden>
-                <Icon className="size-4" />
+                <Icon className="size-5" strokeWidth={2.5} />
               </span>
               <span>
                 <span className="block text-sm font-medium">{mark.label}</span>

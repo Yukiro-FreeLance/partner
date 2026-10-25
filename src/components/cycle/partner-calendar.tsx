@@ -48,26 +48,30 @@ export function PartnerCalendar({ shared, view, cursor }: { shared: SharedCycle;
         <Link className={view === "month" ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground" : "inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm"} href={`/cycle/calendar?view=month&cursor=${cursor}`}>Month</Link>
         <Link className={view === "week" ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground" : "inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm"} href={`/cycle/calendar?view=week&cursor=${cursor}`}>Week</Link>
       </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+      <div className="grid gap-4">
       <CalendarLegend audience="partner" />
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="py-1">{day}</div>)}</div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell) => {
           const flags = flagsFor(cell.day, cell.inMonth);
           return (
-            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} aria-label={describeDay(cell.day, flags)} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-1 text-sm ${daySurface(flags)}`} aria-current={flags.selected ? "date" : undefined}>
+            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} aria-label={describeDay(cell.day, flags)} className={`flex min-h-[5.25rem] flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-1.5 text-sm ${daySurface(flags)}`} aria-current={flags.selected ? "date" : undefined}>
               <span className={flags.today ? "font-semibold text-primary" : ""}>{Number(cell.day.slice(-2))}</span>
               <DayIdentifiers flags={flags} />
             </Link>
           );
         })}
       </div>
-      <section className="panel grid gap-3 p-5">
+      </div>
+      <section className="panel grid h-fit gap-3 p-5">
         <h2 className="font-serif text-2xl">{formatDay(cursor)}</h2>
         <DayMarkList flags={selectedFlags} />
         {dayLines.length > 0 ? <ul className="grid gap-1 text-sm">{dayLines.map((line) => <li key={line}>{line}</li>)}</ul> : <p className="text-sm text-muted-foreground">Nothing from this day has been shared.</p>}
         {dayEvents.map((event) => <p key={event.id} className="text-sm">{event.title}{event.body ? ` — ${event.body}` : ""}</p>)}
         <p className="text-xs text-muted-foreground">Predicted days are estimates, not confirmed medical information.</p>
       </section>
+      </div>
     </div>
   );
 }

@@ -47,6 +47,7 @@ export default async function InsightsPage() {
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{TRACKING_DISCLAIMER} Patterns here are individual. They are not rules about hormones or desire.</p>
       </header>
       <CycleCharts lengths={lengths} symptoms={snapshot.symptoms} drive={drive} />
+      <div className="grid items-start gap-4 xl:grid-cols-2">
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Estimated versus recorded</h2>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -76,6 +77,7 @@ export default async function InsightsPage() {
           {snapshot.series.length === 0 && <li className="text-sm text-muted-foreground">Check-ins will group here after you save a few days.</li>}
         </ul>
       </section>
+      </div>
       <p className="text-sm text-muted-foreground"><a className="font-medium text-primary" href="/api/cycle/export">Export cycle data</a> or erase it from Privacy.</p>
     </div>
   );

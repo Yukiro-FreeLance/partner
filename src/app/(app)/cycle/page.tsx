@@ -94,6 +94,7 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
             </div>
             <DayReadout entry={todayEntry} />
           </section>
+          <div className="grid items-start gap-4 xl:grid-cols-2">
           <section className="panel grid gap-3 p-5">
             <h2 className="font-serif text-2xl">Pregnancy chance and fertility</h2>
             <p className="text-sm">Cycle day {estimate.cycleDay ?? "—"}. Fertile window and ovulation above are predicted.</p>
@@ -142,6 +143,7 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
               ))}
             </ul>
           </section>
+          </div>
         </>
       )}
     </div>

@@ -8,7 +8,7 @@ const grid = "#efe7f6";
 
 export function CycleCharts({ lengths, symptoms, drive }: { lengths: { label: string; days: number }[]; symptoms: { name: string; count: number }[]; drive: { label: string; value: number }[] }) {
   return (
-    <div className="grid gap-4">
+    <div className="grid items-start gap-4 xl:grid-cols-2">
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Recorded cycle lengths</h2>
         <p className="mt-1 text-sm text-muted-foreground">{lengths.length < 2 ? "Log at least two period starts to see cycle length." : `${lengths.length} completed cycles from recorded period starts.`}</p>
@@ -49,7 +49,7 @@ export function CycleCharts({ lengths, symptoms, drive }: { lengths: { label: st
           </div>
         )}
       </section>
-      <section className="panel p-5">
+      <section className="panel p-5 xl:col-span-2">
         <h2 className="font-serif text-2xl">Logged sex drive</h2>
         <p className="mt-1 text-sm text-muted-foreground">This is your own log. A phase label is context, not an explanation of desire.</p>
         {drive.length < 2 ? <p className="mt-3 text-sm text-muted-foreground">Sex drive appears after two check-ins that include it.</p> : (
