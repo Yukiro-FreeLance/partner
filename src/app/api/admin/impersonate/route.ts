@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { accountStatusOf } from "@/lib/auth/account-status";
 import { getCurrentUser, impersonationCookieOptions, IMPERSONATION_COOKIE, signImpersonation } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
 import { writeAudit } from "@/lib/services/access";
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   if (!targetId || targetId === actor.id) return NextResponse.redirect(usersUrl, 303);
   const repo = await getRepository();
   const target = await repo.find("profiles", { eq: { id: targetId } });
-  if (!target || target.role === "super_admin") return NextResponse.redirect(usersUrl, 303);
+  if (!target || target.role === "super_admin" || accountStatusOf(target) !== "active") return NextResponse.redirect(usersUrl, 303);
   await writeAudit(repo, actor.id, `impersonate ${target.id}`);
   const response = NextResponse.redirect(new URL("/home", request.url), 303);
   response.cookies.set(IMPERSONATION_COOKIE, await signImpersonation(target.id, actor.id), impersonationCookieOptions());

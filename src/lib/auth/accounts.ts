@@ -5,6 +5,7 @@ import type { Repository } from "@/lib/data/repository";
 import { createId } from "@/lib/ids";
 import { fail, ok } from "@/lib/result";
 import { assertRateLimit, writeAudit } from "@/lib/services/access";
+import { accountStatusOf } from "@/lib/auth/account-status";
 import { defaultPreferences, readAccountTicket, signAccountTicket } from "@/lib/auth/session";
 
 function now() {
@@ -43,7 +44,7 @@ export async function provisionAccount(repo: Repository, input: { email: string;
   return ok({ userId, email });
 }
 
-export async function registerAccount(repo: Repository, input: { email: string; password: string; displayName: string }) {
+export async function registerAccount(repo: Repository, input: { email: string; password: string; displayName: string; gender: "female" | "male" | "unspecified" }) {
   const email = input.email.trim().toLowerCase();
   const allowed = await assertRateLimit(repo, `register:${email}`, 5, 60 * 60 * 1000);
   if (!allowed) return fail("Too many registration attempts. Please wait and try again.");
@@ -61,6 +62,7 @@ export async function registerAccount(repo: Repository, input: { email: string; 
     interests: [],
     preferredCategories: [],
     role: "user",
+    gender: input.gender,
     isDemo: false,
     emailVerified: false,
     createdAt: stamp,
@@ -123,6 +125,7 @@ export async function loginAccount(repo: Repository, email: string, password: st
   const credential = profile ? await repo.find("credentials", { eq: { userId: profile.id } }) : null;
   const matches = credential ? await compare(password, credential.passwordHash) : false;
   if (!profile || !matches) return fail("Email or password is incorrect.");
+  if (accountStatusOf(profile) !== "active") return fail("This account is unavailable.");
   if (!profile.emailVerified) return fail("Verify your email before signing in. You can resend the link from the verification page.");
   await writeAudit(repo, profile.id, "account.login");
   return ok(profile);

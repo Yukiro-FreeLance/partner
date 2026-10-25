@@ -5,6 +5,7 @@ import type { Repository } from "@/lib/data/repository";
 import { achievements, categories, challenges, conversationCards, personalityQuestions, personalityTests, questionOptions, questions, quizTemplates } from "@/lib/content/catalog";
 import { calendarDay } from "@/lib/cycle/dates";
 import { fictionalCycleSample } from "@/lib/cycle/sample";
+import { saveCycleProfile } from "@/lib/services/cycle";
 import { createId, stableId } from "@/lib/ids";
 import { acceptInvitation, createCouple } from "@/lib/services/couples";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
@@ -96,6 +97,27 @@ export async function ensureDemoCycle(repo: Repository) {
   await repo.insert("cycleEvents", sample.event);
 }
 
+export async function ensureDemoIdentity(repo: Repository) {
+  const now = new Date().toISOString();
+  const maya = await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } });
+  const jordan = await repo.find("profiles", { eq: { email: DEMO_JORDAN_EMAIL } });
+  if (maya?.isDemo && !maya.gender) await repo.update("profiles", maya.id, { gender: "female", updatedAt: now });
+  if (jordan?.isDemo && !jordan.gender) await repo.update("profiles", jordan.id, { gender: "male", updatedAt: now });
+  if (!maya?.isDemo) return;
+  const cycle = await repo.find("cycleProfiles", { eq: { userId: maya.id } });
+  if (!cycle?.sampleData) return;
+  const untouched = !cycle.sharePhaseSummary && !cycle.sharePeriodSummary && !cycle.shareFertileSummary && !cycle.shareMoodSummary && !cycle.shareSymptomSummary && !cycle.shareIntimacySummary && !cycle.shareSelectedDetails;
+  if (!untouched) return;
+  await saveCycleProfile(repo, maya.id, {
+    timeZone: cycle.timeZone,
+    typicalCycleLength: cycle.typicalCycleLength,
+    typicalPeriodLength: cycle.typicalPeriodLength,
+    lutealLength: cycle.lutealLength,
+    sharePhaseSummary: true,
+    sharePeriodSummary: true,
+  });
+}
+
 export async function ensureDemo(repo: Repository) {
   await ensureContent(repo);
   if (await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } })) {
@@ -117,6 +139,7 @@ export async function ensureDemo(repo: Repository) {
     interests: ["Music", "Food", "Quiet nights"],
     preferredCategories: ["favorites", "affection", "dreams"],
     role: "user",
+    gender: "female",
     isDemo: true,
     emailVerified: true,
     createdAt: stamp,
@@ -133,6 +156,7 @@ export async function ensureDemo(repo: Repository) {
     interests: ["Food", "Outdoors", "Movies"],
     preferredCategories: ["favorites", "habits", "playful"],
     role: "user",
+    gender: "male",
     isDemo: true,
     emailVerified: true,
     createdAt: stamp,

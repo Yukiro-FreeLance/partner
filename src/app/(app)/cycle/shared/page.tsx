@@ -3,6 +3,7 @@ import { CycleSetup } from "@/components/cycle/setup";
 import { requireCyclePage } from "@/lib/cycle/access";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { formatDay } from "@/lib/cycle/dates";
+import { tracksOwnCycle } from "@/lib/gender";
 import { loadOwnerCycle, loadSharedCycle } from "@/lib/services/cycle";
 
 export const metadata = { title: "Shared cycle" };
@@ -22,6 +23,7 @@ export default async function SharedCyclePage() {
     return <CycleSetup />;
   }
   const sharing = [
+    mine.profile.sharePhaseSummary ? "Current phase estimate" : null,
     mine.profile.sharePeriodSummary ? "Period dates" : null,
     mine.profile.shareFertileSummary ? "Fertile window estimate" : null,
     mine.profile.shareMoodSummary ? "Mood and energy summaries" : null,
@@ -36,6 +38,7 @@ export default async function SharedCyclePage() {
         {!shared.partnerName && <p className="mt-2 text-sm text-muted-foreground">Join a couple to receive anything a partner chooses to share. Pairing itself never includes cycle data.</p>}
         {shared.partnerName && <p className="mt-2 text-sm text-muted-foreground">{shared.partnerName} controls this. Hidden records are not shown here.</p>}
         <div className="mt-4 grid gap-2 text-sm">
+          <p>{shared.view.phaseSummary ?? "No phase estimate."}</p>
           <p>{shared.view.periodSummary ?? "No period summary."}</p>
           <p>{shared.view.fertileSummary ?? "No fertile-window summary."}</p>
           {shared.view.daily.map((entry) => <p key={entry.day}>{formatDay(entry.day)}: {entry.lines.join(" · ")}</p>)}
@@ -45,8 +48,8 @@ export default async function SharedCyclePage() {
       </section>
       <section className="panel p-5">
         <h2 className="font-serif text-3xl">What you are sharing</h2>
-        {sharing.length === 0 ? <p className="mt-2 text-sm">Nothing. Open Privacy to choose a category.</p> : <ul className="mt-3 grid gap-2 text-sm">{sharing.map((item) => <li key={item}>{item}</li>)}</ul>}
-        <a className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary" href="/cycle/settings">Change sharing</a>
+        {!tracksOwnCycle(access.user.profile.gender) ? <p className="mt-2 text-sm">Cycle tracking is available when gender is set to Female. Nothing from this account is shared.</p> : sharing.length === 0 ? <p className="mt-2 text-sm">Nothing. Open Privacy to choose a category.</p> : <ul className="mt-3 grid gap-2 text-sm">{sharing.map((item) => <li key={item}>{item}</li>)}</ul>}
+        {tracksOwnCycle(access.user.profile.gender) && <a className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary" href="/cycle/settings">Change sharing</a>}
       </section>
     </div>
   );

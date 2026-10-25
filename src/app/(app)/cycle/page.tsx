@@ -2,17 +2,29 @@ import Link from "next/link";
 import { deletePeriodAction, deletePregnancyAction, savePeriodAction, savePregnancyAction } from "@/app/(app)/cycle/actions";
 import { CycleBlocked, CycleStatus } from "@/components/cycle/status";
 import { CycleSetup } from "@/components/cycle/setup";
+import { DayReadout } from "@/components/cycle/day-readout";
+import { PartnerCycleCard } from "@/components/cycle/partner-panel";
 import { CycleRing } from "@/components/cycle/ring";
 import { requireCyclePage } from "@/lib/cycle/access";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
-import { confidenceLabel, levelWord, optionLabel, PHASE_COPY, sourceLabel, SYMPTOM_OPTIONS, TRACKING_DISCLAIMER, MOOD_OPTIONS, DRIVE_OPTIONS } from "@/lib/cycle/copy";
+import { tracksOwnCycle } from "@/lib/gender";
+import { confidenceLabel, PHASE_COPY, sourceLabel, TRACKING_DISCLAIMER } from "@/lib/cycle/copy";
 import { addDays, formatDay, formatDayShort } from "@/lib/cycle/dates";
-import { loadOwnerCycle } from "@/lib/services/cycle";
+import { loadOwnerCycle, loadSharedCycle } from "@/lib/services/cycle";
 import { cycleProviderConfig } from "@/lib/cycle/provider";
 
 export default async function CyclePage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   const access = await requireCyclePage();
   if (access.blocked) return <CycleBlocked />;
+  if (!tracksOwnCycle(access.user.profile.gender)) {
+    try {
+      const shared = await loadSharedCycle(access.repo, access.user.profile.id);
+      return <PartnerCycleCard shared={shared} heading="Shared cycle" />;
+    } catch (error) {
+      if (!isMissingCycleTable(error)) throw error;
+      return <CycleSetup />;
+    }
+  }
   const query = await searchParams;
   let snapshot;
   try {
@@ -79,13 +91,7 @@ export default async function CyclePage({ searchParams }: { searchParams: Promis
               <h2 className="font-serif text-2xl">Today</h2>
               <Link href={`/cycle/check-in?day=${snapshot.today}`} className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground">{todayEntry ? "Edit check-in" : "Daily check-in"}</Link>
             </div>
-            {todayEntry ? (
-              <ul className="grid gap-1 text-sm">
-                <li>Symptoms: {[...todayEntry.symptoms.map((item) => optionLabel(SYMPTOM_OPTIONS, item) ?? item), ...todayEntry.customSymptoms].join(", ") || "None logged"}</li>
-                <li>Mood: {optionLabel(MOOD_OPTIONS, todayEntry.mood) ?? "Not logged"} · Energy: {levelWord(todayEntry.energy) ?? "Not logged"}</li>
-                <li>Sex drive: {optionLabel(DRIVE_OPTIONS, todayEntry.sexDrive) ?? "Not logged"}</li>
-              </ul>
-            ) : <p className="text-sm text-muted-foreground">No check-in for today yet.</p>}
+            <DayReadout entry={todayEntry} />
           </section>
           <section className="panel grid gap-3 p-5">
             <h2 className="font-serif text-2xl">Pregnancy chance and fertility</h2>

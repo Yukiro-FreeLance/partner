@@ -17,6 +17,7 @@ function profile(id: string, name: string): Profile {
     interests: [],
     preferredCategories: [],
     role: "user",
+    gender: "female",
     isDemo: false,
     emailVerified: true,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -130,5 +131,23 @@ describe("cycle privacy permissions", () => {
     const notes = await repo.list("notifications", { eq: { userId: "a" } });
     expect(notes.length).toBeGreaterThan(0);
     expect(notes.map((note) => `${note.title} ${note.body}`).join(" ")).not.toMatch(/period|pregnant|fertile|sex/i);
+  });
+
+  it("shows a partner only the phase and period details that were shared", async () => {
+    const repo = await paired();
+    await repo.update("profiles", "b", { gender: "male" });
+    const denied = await savePeriod(repo, "b", { startedOn: "2026-01-01", endedOn: "2026-01-05" });
+    expect(denied.ok).toBe(false);
+    await savePeriod(repo, "a", { startedOn: "2026-01-01", endedOn: "2026-01-05" });
+    await saveCycleProfile(repo, "a", { timeZone: "UTC", typicalCycleLength: 28, typicalPeriodLength: 5, lutealLength: 14, sharePeriodSummary: true });
+    const shared = await loadSharedCycle(repo, "b", new Date("2026-01-10T12:00:00.000Z"));
+    expect(shared.availability).toBe("shared");
+    expect(shared.view.phaseSummary).toBeNull();
+    expect(shared.view.periodSummary).toMatch(/estimate/i);
+    expect(shared.view.fertileSummary).toBeNull();
+    await saveCycleProfile(repo, "a", { timeZone: "UTC", typicalCycleLength: 28, typicalPeriodLength: 5, lutealLength: 14, sharePhaseSummary: true, sharePeriodSummary: true });
+    const withPhase = await loadSharedCycle(repo, "b", new Date("2026-01-10T12:00:00.000Z"));
+    expect(withPhase.view.phaseSummary).toMatch(/estimate/i);
+    expect(withPhase.view.phase).toBeTruthy();
   });
 });

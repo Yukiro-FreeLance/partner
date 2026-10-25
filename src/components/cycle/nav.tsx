@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const links = [
+const ownerLinks = [
   ["/cycle", "Overview"],
   ["/cycle/check-in", "Check-in"],
   ["/cycle/calendar", "Calendar"],
@@ -13,8 +13,14 @@ const links = [
   ["/cycle/settings", "Privacy"],
 ] as const;
 
-export function CycleNav() {
+const partnerLinks = [
+  ["/cycle", "Shared"],
+  ["/cycle/calendar", "Calendar"],
+] as const;
+
+export function CycleNav({ mode = "owner" }: { mode?: "owner" | "partner" }) {
   const pathname = usePathname();
+  const links = mode === "partner" ? partnerLinks : ownerLinks;
   return (
     <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Cycle">
       {links.map(([href, label]) => {

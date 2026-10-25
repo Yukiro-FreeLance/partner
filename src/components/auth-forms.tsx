@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { demoAction, forgotAction, loginAction, registerAction, resendAction, resetAction } from "@/app/actions";
 import { PasswordField } from "@/components/password-field";
+import { GenderField } from "@/components/gender-field";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
 import type { FormState } from "@/app/actions";
@@ -48,6 +49,7 @@ export function RegisterForm({ next = "" }: { next?: string }) {
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <label className="grid gap-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" required maxLength={40} /></label>
       <label className="grid gap-2"><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" autoComplete="email" required /></label>
+      <GenderField />
       <PasswordField label="Password" name="password" autoComplete="new-password" />
       <PasswordField label="Confirm password" name="confirmPassword" autoComplete="new-password" />
       <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" name="acceptTerms" required /> I agree to the <Link href="/terms" className="underline">terms</Link> and <Link href="/privacy" className="underline">privacy policy</Link>.</label>

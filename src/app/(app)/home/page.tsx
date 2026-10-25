@@ -3,9 +3,14 @@ import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from 
 import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play } from "lucide-react";
 import { resetDemoAction } from "@/app/actions";
 import { BannerUpload } from "@/components/banner-upload";
+import { PartnerCycleCard } from "@/components/cycle/partner-panel";
 import { Avatar } from "@/components/ui/feedback";
 import { requireUser } from "@/lib/auth/session";
+import { PHASE_COPY } from "@/lib/cycle/copy";
+import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { getRepository } from "@/lib/data";
+import { tracksOwnCycle } from "@/lib/gender";
+import { loadOwnerCycle, loadSharedCycle } from "@/lib/services/cycle";
 import { activeMembership, otherPartner } from "@/lib/services/access";
 import { getConnectionReport } from "@/lib/services/insights";
 import { listMySessions } from "@/lib/services/quiz";
@@ -67,12 +72,26 @@ export default async function HomePage() {
   const todayLink = todayRound ? (await repo.list("quizRoundQuestions", { eq: { roundId: todayRound.id } }))[0] : null;
   const todayQuestion = todayLink ? await repo.find("questions", { eq: { id: todayLink.questionId } }) : null;
   const score = report?.knowledge.score ?? null;
+  const tracks = tracksOwnCycle(user.profile.gender);
+  let shared: Awaited<ReturnType<typeof loadSharedCycle>> | null = null;
+  let ownPhase: string | null = null;
+  try {
+    shared = await loadSharedCycle(repo, user.profile.id);
+    if (tracks) {
+      const own = await loadOwnerCycle(repo, user.profile.id);
+      ownPhase = own.estimate.hasHistory && own.estimate.phase !== "unknown" ? PHASE_COPY[own.estimate.phase].title : null;
+    }
+  } catch (error) {
+    if (!isMissingCycleTable(error)) throw error;
+  }
   const features = [
     ["/play", "Partner Quiz", "Guess what your partner answered and reveal together.", "Start Quiz", Gamepad2, "bg-[#f7e8ff]"],
     ["/personality", "Personality Lab", "Explore personalities, communication styles, and love languages.", "Take Test", Brain, "bg-[#eee9ff]"],
     ["/connection", "Our Connection", "Compare your answers, find shared interests, and discover new things.", "View Insights", Heart, "bg-[#ffe8f1]"],
     ["/memories", "Our Story", "Save milestones, memories, and your future dreams together.", "Open Timeline", ImageIcon, "bg-[#e7f1ff]"],
-    ["/cycle", "Cycle Tracker", "Follow your cycle and share only what you choose.", "Open tracker", CalendarHeart, "bg-[#fde7f3]"],
+    tracks
+      ? ["/cycle", "Cycle Tracker", "Follow your cycle and share only what you choose.", "Open tracker", CalendarHeart, "bg-[#fde7f3]"]
+      : ["/cycle", "Partner cycle", "See the cycle details your partner chooses to share.", "View shared cycle", CalendarHeart, "bg-[#fde7f3]"],
   ] as const;
 
   return (
@@ -205,6 +224,14 @@ export default async function HomePage() {
             <p className="mt-3 text-xs leading-5 text-muted-foreground">{SCORE_DISCLAIMER}</p>
             <p className="mt-2 text-xs text-muted-foreground">{daysTogether ?? "—"} days together · {user.preferences.dailyStreak} day streak · {user.preferences.points} points</p>
           </section>
+          {tracks && (
+            <section className="panel p-5">
+              <h2 className="font-serif text-2xl">Your cycle</h2>
+              <p className="mt-2 text-sm leading-6">{ownPhase ? `${ownPhase} phase estimate.` : "Log a period to start a personal estimate."} Predictions are estimates, not confirmed medical information.</p>
+              <Link href="/cycle" className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary">Open tracker</Link>
+            </section>
+          )}
+          {shared && <PartnerCycleCard shared={shared} />}
           <section className="panel hidden p-5 lg:block">
             <div className="flex items-center justify-between"><h2 className="font-serif text-2xl">Recent Activity</h2><Link href="/notifications" className="text-sm text-primary">View All</Link></div>
             <ActivityList notes={recentNotes} />

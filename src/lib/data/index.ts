@@ -3,29 +3,30 @@ import { isSupabaseConfigured } from "@/lib/config";
 import { getLocalRepository } from "@/lib/data/local";
 import type { Repository } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-store";
-import { ensureContent, ensureDemoCycle, ensureOperator } from "@/lib/demo/seed";
-import { isMissingCycleTable } from "@/lib/cycle/errors";
+import { ensureContent, ensureDemoCycle, ensureDemoIdentity, ensureOperator } from "@/lib/demo/seed";
+import { isMissingColumn, isMissingCycleTable } from "@/lib/cycle/errors";
 
-const staff = globalThis as { __couplesyncStaffReady?: Promise<void> };
+const staff = globalThis as { __couplesyncReady?: Promise<void> };
 
 export async function getRepository(): Promise<Repository> {
   const repo = isSupabaseConfigured() ? createSupabaseRepository() : await getLocalRepository();
-  staff.__couplesyncStaffReady ??= (async () => {
+  staff.__couplesyncReady ??= (async () => {
     const sample = await repo.list("questions", {}, { limit: 1 });
     if (sample.length === 0) await ensureContent(repo);
     await ensureOperator(repo);
     try {
       await ensureDemoCycle(repo);
+      await ensureDemoIdentity(repo);
     } catch (error) {
-      if (!isMissingCycleTable(error)) throw error;
+      if (!isMissingCycleTable(error) && !isMissingColumn(error)) throw error;
     }
   })().then(
     () => undefined,
     (error) => {
-      staff.__couplesyncStaffReady = undefined;
+      staff.__couplesyncReady = undefined;
       console.error("Operator setup failed", error instanceof Error ? error.message : "unknown error");
     },
   );
-  await staff.__couplesyncStaffReady;
+  await staff.__couplesyncReady;
   return repo;
 }

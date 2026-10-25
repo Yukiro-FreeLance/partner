@@ -179,13 +179,14 @@ describe("partner projection", () => {
   });
 
   it("hides private health details until each grant and day setting allows them", () => {
-    const hidden = projectForPartner({ grants: [grant("mood_summary"), grant("selected_details"), grant("intimacy_summary")], estimate, checkIns: [entry()], events: [] });
+    const hidden = projectForPartner({ grants: [grant("mood_summary"), grant("selected_details"), grant("intimacy_summary")], estimate, periods: [], checkIns: [entry()], events: [] });
     expect(hidden.daily).toEqual([]);
     expect(JSON.stringify(hidden)).not.toMatch(/private journal|unprotected|Sex drive/);
 
     const summary = projectForPartner({
       grants: [grant("mood_summary")],
       estimate,
+      periods: [],
       checkIns: [entry({ shareLevel: "summary", notes: "private journal", sexualActivity: "unprotected" })],
       events: [],
     });
@@ -195,6 +196,7 @@ describe("partner projection", () => {
     const selected = projectForPartner({
       grants: [grant("intimacy_summary"), grant("selected_details")],
       estimate,
+      periods: [],
       checkIns: [entry({ shareLevel: "selected", sharedFields: ["sexDrive", "notes"] })],
       events: [],
     });
@@ -205,6 +207,7 @@ describe("partner projection", () => {
     const revoked = projectForPartner({
       grants: [grant("period_summary", "2026-01-02T00:00:00.000Z")],
       estimate,
+      periods: [],
       checkIns: [],
       events: [{ id: "event", userId: "owner", coupleId: "couple", day: "2026-01-11", title: "Dinner", body: "secret", visibility: "private", createdAt: "", updatedAt: "" }],
     });

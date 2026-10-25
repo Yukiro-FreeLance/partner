@@ -1,5 +1,6 @@
 import { blockAction, deleteAccountAction, leaveCoupleAction, newInviteAction, readNotificationsAction, reconnectAction, reconnectReplyAction, reportAction, revokeInviteAction, settingsAction } from "@/app/actions";
 import { AvatarUpload } from "@/components/avatar-upload";
+import { GenderField } from "@/components/gender-field";
 import { RelationshipStatusField } from "@/components/relationship-status";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/field";
@@ -10,8 +11,8 @@ import { activeMembership, otherPartner } from "@/lib/services/access";
 
 export const metadata = { title: "Settings" };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  const { saved } = await searchParams;
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+  const { saved, error } = await searchParams;
   const user = await requireUser();
   const repo = await getRepository();
   const membership = await activeMembership(repo, user.profile.id);
@@ -22,6 +23,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   return (
     <main className="mx-auto grid w-full max-w-6xl items-start gap-6 px-4 py-6 lg:grid-cols-3 lg:px-8">
       {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 lg:col-span-3" role="status">Settings saved.</p>}
+      {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive lg:col-span-3" role="alert">{error}</p>}
       <section className="h-fit rounded-[1.75rem] bg-white p-6 text-center shadow-[var(--shadow)]">
         <h1 className="font-serif text-3xl">Settings</h1>
         <div className="mt-6"><AvatarUpload name={user.profile.displayName} src={user.profile.avatarUrl} /></div>
@@ -29,6 +31,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <form id="privacy" action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)] sm:grid-cols-2 lg:col-span-2">
         <input type="hidden" name="returnTo" value="/settings" />
         <label className="grid gap-2 sm:col-span-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /></label>
+        <div className="sm:col-span-2"><GenderField defaultValue={user.profile.gender} /></div>
         <RelationshipStatusField label="Relationship" defaultValue={user.profile.relationshipStatus} />
         <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" defaultValue={user.profile.relationshipStartedOn ?? ""} /></label>
         <label className="grid gap-2 text-sm">Theme

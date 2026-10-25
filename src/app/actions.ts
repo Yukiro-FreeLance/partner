@@ -11,7 +11,8 @@ import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, 
 import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
-import { contactSchema, coupleSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
+import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
+import { pauseCycleSharing } from "@/lib/services/cycle";
 import { acceptInvitation, createCouple, createInvitation, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
 import { completeQuiz, getOrCreateDaily, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
@@ -47,6 +48,7 @@ export async function registerAction(_state: FormState, formData: FormData): Pro
   const parsed = registerSchema.safeParse({
     displayName: formString(formData, "displayName"),
     email: formString(formData, "email"),
+    gender: formString(formData, "gender"),
     password: formString(formData, "password"),
     confirmPassword: formString(formData, "confirmPassword"),
     acceptTerms: formData.get("acceptTerms") === "on",
@@ -470,12 +472,18 @@ export async function settingsAction(formData: FormData) {
   const chosenTheme = formString(formData, "theme");
   const theme: "light" | "dark" | "system" = chosenTheme === "dark" || chosenTheme === "system" ? chosenTheme : "light";
   const locale: "en" | "fil" = formString(formData, "locale") === "fil" ? "fil" : "en";
+  const gender = genderSchema.safeParse(formString(formData, "gender"));
+  const returnTo = formString(formData, "returnTo") === "/profile" ? "/profile" : "/settings";
+  if (!gender.success) redirect(`${returnTo}?error=${encodeURIComponent("Select a gender.")}`);
   await repo.update("profiles", user.profile.id, {
     displayName: formString(formData, "displayName").trim() || user.profile.displayName,
+    gender: gender.data,
     relationshipStatus: formString(formData, "relationshipStatus") || null,
     relationshipStartedOn: formString(formData, "relationshipStartedOn") || null,
     updatedAt: new Date().toISOString(),
   });
+  if (user.profile.gender === "female" && gender.data !== "female") await pauseCycleSharing(repo, user.profile.id);
+  if (user.profile.gender !== gender.data) await writeAudit(repo, user.profile.id, "account.gender");
   const preferences = await repo.find("userPreferences", { eq: { userId: user.profile.id } });
   const nextPreferences = {
     ...defaultPreferences(user.profile.id),
@@ -496,6 +504,7 @@ export async function settingsAction(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/profile");
   revalidatePath("/home");
+  revalidatePath("/cycle");
   redirect(formString(formData, "returnTo") === "/profile" ? "/profile?saved=1" : "/settings?saved=1");
 }
 
@@ -595,10 +604,10 @@ export async function createMemberAction(formData: FormData) {
       : password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)
         ? "Use at least 8 characters, with a letter and a number."
         : null;
-  if (problem) redirect(`/admin/users?error=${encodeURIComponent(problem)}`);
+  if (problem) redirect(`/admin/users?createError=${encodeURIComponent(problem)}`);
   const repo = await getRepository();
   const created = await provisionAccount(repo, { displayName, email, password, role });
-  if (!created.ok) redirect(`/admin/users?error=${encodeURIComponent(created.error)}`);
+  if (!created.ok) redirect(`/admin/users?createError=${encodeURIComponent(created.error)}`);
   await writeAudit(repo, actor.id, `create user ${created.data.userId}`);
   revalidatePath("/admin/users");
   redirect("/admin/users?created=1");
@@ -619,6 +628,46 @@ export async function setMemberRoleAction(formData: FormData) {
   await writeAudit(repo, actor.id, `set role ${target.id} ${role}`);
   revalidatePath("/admin/users");
   redirect(`/admin/users?saved=${encodeURIComponent(target.displayName)}`);
+}
+
+export async function setAccountStatusAction(formData: FormData) {
+  const user = await requireUser();
+  const actor = user.actor ?? user.profile;
+  if (actor.role !== "super_admin") redirect("/home");
+  const targetId = formString(formData, "userId");
+  const status = formString(formData, "status");
+  if (status !== "active" && status !== "archived" && status !== "deleted") redirect("/admin/users?error=" + encodeURIComponent("Choose archive, delete, or restore."));
+  if (!targetId || targetId === actor.id) redirect("/admin/users?error=" + encodeURIComponent("You cannot change your own account."));
+  const repo = await getRepository();
+  const target = await repo.find("profiles", { eq: { id: targetId } });
+  if (!target || target.role === "super_admin") redirect("/admin/users?error=" + encodeURIComponent("That account cannot be changed."));
+  await repo.update("profiles", target.id, { accountStatus: status, updatedAt: new Date().toISOString() });
+  await writeAudit(repo, actor.id, `account.${status} ${target.id}`);
+  revalidatePath("/admin/users");
+  const verb = status === "active" ? "restored" : status;
+  redirect(`/admin/users?notice=${encodeURIComponent(`${target.displayName} ${verb}.`)}`);
+}
+
+export async function deleteMemberPermanentlyAction(formData: FormData) {
+  const user = await requireUser();
+  const actor = user.actor ?? user.profile;
+  if (actor.role !== "super_admin") redirect("/home");
+  const targetId = formString(formData, "userId");
+  if (!targetId || targetId === actor.id) redirect("/admin/users?error=" + encodeURIComponent("You cannot erase your own account from this list."));
+  const repo = await getRepository();
+  const target = await repo.find("profiles", { eq: { id: targetId } });
+  if (!target || target.role === "super_admin") redirect("/admin/users?error=" + encodeURIComponent("That account cannot be erased."));
+  if (target.isDemo) redirect("/admin/users?error=" + encodeURIComponent("Fictional demo profiles stay with the sample data. Archive or delete them instead."));
+  await writeAudit(repo, actor.id, `account.purge ${target.id}`);
+  try {
+    await deleteAccount(repo, target.id);
+  } catch (error) {
+    await repo.update("profiles", target.id, { accountStatus: "deleted", updatedAt: new Date().toISOString() });
+    const detail = error instanceof Error ? error.message : "Shared records still reference this account.";
+    redirect(`/admin/users?error=${encodeURIComponent(`The account was marked deleted. It could not be erased completely: ${detail}`)}`);
+  }
+  revalidatePath("/admin/users");
+  redirect(`/admin/users?notice=${encodeURIComponent(`${target.displayName} was permanently deleted.`)}`);
 }
 
 export async function stopImpersonatingAction() {

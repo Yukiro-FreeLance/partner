@@ -1,7 +1,9 @@
 import { deleteCycleAction, deleteReminderAction, saveProfileAction, saveReminderAction } from "@/app/(app)/cycle/actions";
+import { PersonalCycleNotice } from "@/components/cycle/partner-panel";
 import { CycleBlocked, CycleStatus } from "@/components/cycle/status";
 import { CycleSetup } from "@/components/cycle/setup";
 import { requireCyclePage } from "@/lib/cycle/access";
+import { tracksOwnCycle } from "@/lib/gender";
 import { cycleProviderConfig } from "@/lib/cycle/provider";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { loadOwnerCycle } from "@/lib/services/cycle";
@@ -13,6 +15,7 @@ const zones = ["UTC", "Asia/Manila", "America/Los_Angeles", "America/New_York", 
 export default async function CycleSettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   const access = await requireCyclePage();
   if (access.blocked) return <CycleBlocked />;
+  if (!tracksOwnCycle(access.user.profile.gender)) return <PersonalCycleNotice />;
   const query = await searchParams;
   let snapshot;
   try {
@@ -43,7 +46,8 @@ export default async function CycleSettingsPage({ searchParams }: { searchParams
         </div>
         <label className="flex min-h-11 items-start gap-3 text-sm"><input name="externalEstimateConsent" type="checkbox" defaultChecked={profile.externalEstimateConsent} /> <span>Allow period start dates and cycle length settings to be sent to the configured calculator. Symptoms, notes, sex, contraception, and pregnancy logs are not sent. The result is still an estimate. {provider.mode === "apiverve" ? "A calculator is configured on this server." : "No calculator is configured, so dates stay in CoupleSync."}</span></label>
         <h2 className="font-serif text-2xl">What a partner may see</h2>
-        <p className="text-sm text-muted-foreground">These switches are the consent. A check-in still has to be set to summary or selected details. Leaving the couple revokes them.</p>
+        <p className="text-sm text-muted-foreground">These switches are the consent. A check-in still has to be set to summary or selected details. Leaving the couple, or changing gender away from Female, revokes them. Predictions stay labeled as estimates.</p>
+        <Toggle name="sharePhaseSummary" label="Share the current cycle phase estimate" defaultChecked={profile.sharePhaseSummary} />
         <Toggle name="sharePeriodSummary" label="Share period start and the estimated next period" defaultChecked={profile.sharePeriodSummary} />
         <Toggle name="shareFertileSummary" label="Share the estimated fertile window" defaultChecked={profile.shareFertileSummary} />
         <Toggle name="shareMoodSummary" label="Share mood and energy from days you mark as a summary" defaultChecked={profile.shareMoodSummary} />

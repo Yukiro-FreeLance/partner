@@ -1,18 +1,29 @@
 import { CycleCharts } from "@/components/cycle/charts";
+import { PersonalCycleNotice } from "@/components/cycle/partner-panel";
 import { CycleBlocked } from "@/components/cycle/status";
 import { CycleSetup } from "@/components/cycle/setup";
 import { requireCyclePage } from "@/lib/cycle/access";
+import { tracksOwnCycle } from "@/lib/gender";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { PHASE_COPY, TRACKING_DISCLAIMER } from "@/lib/cycle/copy";
 import { formatDayShort } from "@/lib/cycle/dates";
 import { driveValue } from "@/lib/cycle/report";
 import { loadOwnerCycle } from "@/lib/services/cycle";
 
+const phaseTone: Record<string, string> = {
+  menstrual: "bg-[#ffe4e6] text-[#9f1239]",
+  follicular: "bg-[#fce7f3] text-[#9d174d]",
+  ovulation: "bg-[#f5f3ff] text-[#6d28d9]",
+  luteal: "bg-[#ede9fe] text-[#5b21b6]",
+  unknown: "bg-[#faf7ff] text-[#6b6280]",
+};
+
 export const metadata = { title: "Cycle insights" };
 
 export default async function InsightsPage() {
   const access = await requireCyclePage();
   if (access.blocked) return <CycleBlocked />;
+  if (!tracksOwnCycle(access.user.profile.gender)) return <PersonalCycleNotice />;
   let snapshot;
   try {
     snapshot = await loadOwnerCycle(access.repo, access.user.profile.id);
@@ -38,26 +49,34 @@ export default async function InsightsPage() {
       <CycleCharts lengths={lengths} symptoms={snapshot.symptoms} drive={drive} />
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Estimated versus recorded</h2>
-        <ul className="mt-3 grid gap-2 text-sm">
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {snapshot.history.map((row) => (
-            <li key={row.start}>
-              {formatDayShort(row.start)} · {row.lengthStatus === "recorded" ? `${row.length} days recorded` : "Current cycle, still open"}
-              {row.periodDays ? ` · period ${row.periodDays} days recorded` : ""}
-              {row.earlierEstimate ? ` · earlier length estimate ${row.earlierEstimate} days` : ""}
+            <li key={row.start} className="rounded-3xl bg-[#faf5ff] p-4">
+              <p className="text-xs font-medium text-muted-foreground">{row.lengthStatus === "recorded" ? "Recorded cycle" : "Current cycle"}</p>
+              <p className="mt-1 font-serif text-3xl text-[#4c1d95]">{row.length ? `${row.length}` : "Open"}{row.length ? <span className="ml-1 text-base font-sans font-medium text-muted-foreground">days</span> : null}</p>
+              <p className="mt-2 text-sm">Started {formatDayShort(row.start)}</p>
+              <p className="text-sm text-muted-foreground">{row.periodDays ? `Period ${row.periodDays} days recorded` : "Period end not recorded"}</p>
+              {row.earlierEstimate ? <p className="mt-1 text-xs text-muted-foreground">Earlier length estimate {row.earlierEstimate} days</p> : null}
             </li>
           ))}
-          {snapshot.history.length === 0 && <li className="text-muted-foreground">Log a period to start a history.</li>}
+          {snapshot.history.length === 0 && <li className="text-sm text-muted-foreground">Log a period to start a history.</li>}
         </ul>
       </section>
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Notes across phases</h2>
         <p className="mt-2 text-sm text-muted-foreground">Phase labels on past days use the recorded interval when the next period start is known. They are still estimates.</p>
-        <ul className="mt-3 grid gap-2 text-sm">
-          {Object.entries(phaseCounts).map(([phase, count]) => <li key={phase}>{PHASE_COPY[phase as keyof typeof PHASE_COPY]?.title ?? phase}: {count} check-ins</li>)}
-          {snapshot.series.length === 0 && <li className="text-muted-foreground">Check-ins will group here after you save a few days.</li>}
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Object.entries(phaseCounts).map(([phase, count]) => (
+            <li key={phase} className={`rounded-3xl p-4 ${phaseTone[phase] ?? phaseTone.unknown}`}>
+              <p className="text-xs font-medium">{phase === "unknown" ? "Open cycle" : PHASE_COPY[phase as keyof typeof PHASE_COPY]?.title ?? phase}</p>
+              <p className="mt-1 font-serif text-3xl">{count}</p>
+              <p className="text-xs">{count === 1 ? "check-in" : "check-ins"}</p>
+            </li>
+          ))}
+          {snapshot.series.length === 0 && <li className="text-sm text-muted-foreground">Check-ins will group here after you save a few days.</li>}
         </ul>
       </section>
-      <p className="text-sm"><a className="underline" href="/api/cycle/export">Export cycle data</a> or erase it from Privacy.</p>
+      <p className="text-sm text-muted-foreground"><a className="font-medium text-primary" href="/api/cycle/export">Export cycle data</a> or erase it from Privacy.</p>
     </div>
   );
 }

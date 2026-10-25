@@ -1,42 +1,45 @@
-import { createMemberAction, setMemberRoleAction } from "@/app/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/field";
+import Link from "next/link";
+import { CreateUserDialog } from "@/components/admin/create-user-dialog";
+import { UserActions } from "@/components/admin/user-actions";
+import { accountStatusOf } from "@/lib/auth/account-status";
 import { getRepository } from "@/lib/data";
 import { requireUser } from "@/lib/auth/session";
 
 export const metadata = { title: "Users" };
 
-export default async function UsersPage({ searchParams }: { searchParams: Promise<{ created?: string; error?: string; saved?: string }> }) {
+const views = [
+  ["all", "All"],
+  ["active", "Active"],
+  ["archived", "Archived"],
+  ["deleted", "Deleted"],
+] as const;
+
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ created?: string; error?: string; createError?: string; saved?: string; notice?: string; view?: string }> }) {
   const user = await requireUser();
   const actor = user.actor ?? user.profile;
   if (actor.role !== "super_admin") return <main className="p-6">The user list is limited to super admins. Sign in with the account in SUPER_ADMIN_EMAILS. Demo profiles stay members.</main>;
-  const { created, error, saved } = await searchParams;
+  const query = await searchParams;
+  const view = views.some(([key]) => key === query.view) ? query.view ?? "all" : "all";
   const people = (await (await getRepository()).list("profiles", {})).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const visible = people.filter((person) => view === "all" || accountStatusOf(person) === view);
   return (
     <main className="grid w-full items-start gap-6">
-      <div>
-        <h1 className="font-serif text-4xl">User list</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Names and roles only. Quiz answers, notes, and personality results are not shown. Impersonation opens that person&apos;s home and can be stopped from the banner.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-4xl">User list</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Names and roles only. Quiz answers, notes, and personality results are not shown. Impersonation opens that person&apos;s home and can be stopped from the banner.</p>
+        </div>
+        <CreateUserDialog defaultOpen={Boolean(query.createError)} error={query.createError} />
       </div>
-      {saved && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Role saved for {saved}.</p>}
-      {created === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Account created. They can sign in with that email and password.</p>}
-      {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{error}</p>}
-      <form action={createMemberAction} className="grid h-fit gap-3 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)] sm:grid-cols-2 xl:grid-cols-4">
-        <div className="sm:col-span-2 xl:col-span-4">
-          <h2 className="font-serif text-2xl">Create user</h2>
-          <p className="mt-1 text-sm text-muted-foreground">New accounts are real sign-ins. Demo profiles cannot be promoted.</p>
-        </div>
-        <Input name="displayName" required maxLength={40} placeholder="Display name" autoComplete="off" />
-        <Input name="email" type="email" required placeholder="Email" autoComplete="off" />
-        <Input name="password" type="password" required minLength={8} placeholder="Password" autoComplete="new-password" />
-        <select name="role" defaultValue="user" aria-label="Role for the new user" className="h-11 rounded-2xl border bg-white px-3 text-sm">
-          <option value="user">Member</option>
-          <option value="admin">Admin</option>
-        </select>
-        <div className="sm:col-span-2 xl:col-span-4">
-          <Button type="submit">Create user</Button>
-        </div>
-      </form>
+      {query.saved && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">Role saved for {query.saved}.</p>}
+      {query.notice && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">{query.notice}</p>}
+      {query.created === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">Account created. They can sign in with that email and password.</p>}
+      {query.error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{query.error}</p>}
+      <div className="flex flex-wrap gap-2">
+        {views.map(([key, label]) => (
+          <Link key={key} href={key === "all" ? "/admin/users" : `/admin/users?view=${key}`} className={view === key ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground" : "inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm"}>{label}</Link>
+        ))}
+      </div>
       <div className="overflow-x-auto rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
         <table className="w-full min-w-[760px] border-collapse text-left text-sm">
           <thead>
@@ -45,43 +48,30 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
               <th className="px-4 py-3 font-medium">Account</th>
-              <th className="px-4 py-3 font-medium">Actions</th>
+              <th className="px-4 py-3 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {people.map((person) => {
+            {visible.map((person) => {
               const roleLabel = person.role === "super_admin" ? "Super admin" : person.role === "admin" ? "Admin" : "Member";
+              const status = accountStatusOf(person);
+              const manageable = person.id !== actor.id && person.role !== "super_admin";
               return (
                 <tr key={person.id} className="border-b border-[#f8f1fa] last:border-b-0">
                   <td className="px-4 py-3 font-medium">{person.displayName}</td>
                   <td className="px-4 py-3 break-all text-muted-foreground">{person.email}</td>
                   <td className="px-4 py-3">{roleLabel}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{person.isDemo ? "Fictional demo" : "Real account"}</td>
-                  <td className="px-4 py-3">
-                    {person.id !== actor.id && person.role !== "super_admin" ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!person.isDemo && (
-                          <form action={setMemberRoleAction} className="flex flex-wrap items-center gap-2">
-                            <input type="hidden" name="userId" value={person.id} />
-                            <select key={`${person.id}-${person.role}`} name="role" defaultValue={person.role === "admin" ? "admin" : "user"} aria-label={`Role for ${person.displayName}`} className="h-11 rounded-full border bg-white px-3 text-sm">
-                              <option value="user">Member</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                            <Button type="submit" variant="secondary">Save role</Button>
-                          </form>
-                        )}
-                        <form method="post" action="/api/admin/impersonate">
-                          <input type="hidden" name="userId" value={person.id} />
-                          <Button type="submit" variant="outline">Impersonate</Button>
-                        </form>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <span>{person.isDemo ? "Fictional demo" : "Real account"}</span>
+                    {status !== "active" && <span className="ml-2 rounded-full bg-[#f5f3ff] px-2 py-1 text-xs font-medium text-[#6d28d9] capitalize">{status}</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {manageable ? <UserActions userId={person.id} name={person.displayName} role={person.role === "admin" ? "admin" : "user"} isDemo={person.isDemo} status={status} /> : <span className="text-muted-foreground">—</span>}
                   </td>
                 </tr>
               );
             })}
+            {visible.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No accounts in this view.</td></tr>}
           </tbody>
         </table>
       </div>

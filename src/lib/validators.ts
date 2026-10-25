@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+export const genderSchema = z.enum(["female", "male", "unspecified"], { errorMap: () => ({ message: "Select a gender." }) });
+
 export const registerSchema = z.object({
   displayName: z.string().trim().min(1, "Add your name.").max(40, "Use 40 characters or fewer."),
   email: z.string().trim().email("Enter a valid email address."),
+  gender: genderSchema,
   password: z.string().min(8, "Use at least 8 characters.").regex(/[A-Za-z]/, "Include a letter.").regex(/[0-9]/, "Include a number."),
   confirmPassword: z.string(),
   acceptTerms: z.literal(true, { errorMap: () => ({ message: "Please accept the terms and privacy policy." }) }),

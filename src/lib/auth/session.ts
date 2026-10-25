@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify, SignJWT } from "jose";
+import { accountStatusOf } from "@/lib/auth/account-status";
 import { isAdminEmail, isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
 import { getRepository } from "@/lib/data";
 import type { Profile, UserPreferences } from "@/lib/domain";
@@ -181,7 +182,7 @@ async function impersonatedUser(real: Profile) {
     if (payload.act !== real.id || typeof payload.sub !== "string" || payload.sub === real.id) return null;
     const repo = await getRepository();
     const target = await repo.find("profiles", { eq: { id: payload.sub } });
-    if (!target || target.role === "super_admin") return null;
+    if (!target || target.role === "super_admin" || accountStatusOf(target) !== "active") return null;
     return target;
   } catch {
     return null;
@@ -217,7 +218,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     let profile = await repo.find("profiles", { eq: { id: session.userId } });
     if (!profile && session.email) profile = await repo.find("profiles", { eq: { email: session.email } });
     if (!profile && session.email) profile = await restoreSessionProfile(repo, session.userId, session.email);
-    if (!profile) return null;
+    if (!profile || accountStatusOf(profile) !== "active") return null;
     const synced = await syncAdmin(profile);
     const target = await impersonatedUser(synced);
     const effective = target ?? synced;
@@ -250,6 +251,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       });
       await repo.insert("userPreferences", defaultPreferences(profile.id));
     }
+    if (accountStatusOf(profile) !== "active") return null;
     profile = await syncAdmin(profile);
     const target = await impersonatedUser(profile);
     const effective = target ?? profile;

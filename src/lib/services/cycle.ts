@@ -10,10 +10,12 @@ import { resolveEstimate } from "@/lib/cycle/provider";
 import { dueReminderPlans, nextReminderDay } from "@/lib/cycle/reminders";
 import { driveValue, insightSeries, symptomFrequency } from "@/lib/cycle/report";
 import { blankCycleProfile } from "@/lib/cycle/sample";
+import { tracksOwnCycle } from "@/lib/gender";
 import { createId } from "@/lib/ids";
 import { fail, ok, type Result } from "@/lib/result";
 
 const SHARE_FLAGS: [keyof CycleProfile, CycleShareScope][] = [
+  ["sharePhaseSummary", "phase_summary"],
   ["sharePeriodSummary", "period_summary"],
   ["shareFertileSummary", "fertile_summary"],
   ["shareMoodSummary", "mood_summary"],
@@ -24,6 +26,13 @@ const SHARE_FLAGS: [keyof CycleProfile, CycleShareScope][] = [
 
 function stamp() {
   return new Date().toISOString();
+}
+
+const TRACKER_REQUIRED = "Cycle tracking is available when gender is set to Female in Profile.";
+
+async function trackerDenied(repo: Repository, userId: string) {
+  const profile = await repo.find("profiles", { eq: { id: userId } });
+  return tracksOwnCycle(profile?.gender) ? null : TRACKER_REQUIRED;
 }
 
 async function storedProfile(repo: Repository, userId: string) {
@@ -50,6 +59,8 @@ function rangesOverlap(periods: CyclePeriod[], startedOn: string, endedOn: strin
 }
 
 export async function saveCycleProfile(repo: Repository, userId: string, input: unknown): Promise<Result<CycleProfile>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the cycle settings.");
   const current = await profileOrBlank(repo, userId);
@@ -90,6 +101,8 @@ async function syncShareGrants(repo: Repository, profile: CycleProfile) {
 }
 
 export async function savePeriod(repo: Repository, userId: string, input: unknown): Promise<Result<CyclePeriod>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = periodSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the period dates.");
   const profile = await profileOrBlank(repo, userId);
@@ -120,6 +133,8 @@ export async function savePeriod(repo: Repository, userId: string, input: unknow
 }
 
 export async function deletePeriod(repo: Repository, userId: string, id: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const current = await repo.find("cyclePeriods", { eq: { id, userId } });
   if (!current) return fail("That period was not found.");
   await repo.remove("cyclePeriods", id);
@@ -127,6 +142,8 @@ export async function deletePeriod(repo: Repository, userId: string, id: string)
 }
 
 export async function saveCheckIn(repo: Repository, userId: string, input: unknown): Promise<Result<CycleCheckIn>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = checkInSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the daily entry.");
   const profile = await profileOrBlank(repo, userId);
@@ -148,6 +165,8 @@ export async function saveCheckIn(repo: Repository, userId: string, input: unkno
 }
 
 export async function deleteCheckIn(repo: Repository, userId: string, id: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const current = await repo.find("cycleCheckIns", { eq: { id, userId } });
   if (!current) return fail("That check-in was not found.");
   await repo.remove("cycleCheckIns", id);
@@ -155,6 +174,8 @@ export async function deleteCheckIn(repo: Repository, userId: string, id: string
 }
 
 export async function savePregnancyLog(repo: Repository, userId: string, input: unknown): Promise<Result<CyclePregnancyLog>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = pregnancySchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the test entry.");
   const profile = await profileOrBlank(repo, userId);
@@ -165,6 +186,8 @@ export async function savePregnancyLog(repo: Repository, userId: string, input: 
 }
 
 export async function deletePregnancyLog(repo: Repository, userId: string, id: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const current = await repo.find("cyclePregnancyLogs", { eq: { id, userId } });
   if (!current) return fail("That test entry was not found.");
   await repo.remove("cyclePregnancyLogs", id);
@@ -172,6 +195,8 @@ export async function deletePregnancyLog(repo: Repository, userId: string, id: s
 }
 
 export async function saveReminder(repo: Repository, userId: string, input: unknown): Promise<Result<CycleReminder>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = reminderSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the reminder.");
   const profile = await profileOrBlank(repo, userId);
@@ -198,6 +223,8 @@ export async function saveReminder(repo: Repository, userId: string, input: unkn
 }
 
 export async function deleteReminder(repo: Repository, userId: string, id: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const current = await repo.find("cycleReminders", { eq: { id, userId } });
   if (!current) return fail("That reminder was not found.");
   await repo.remove("cycleReminders", id);
@@ -205,6 +232,8 @@ export async function deleteReminder(repo: Repository, userId: string, id: strin
 }
 
 export async function saveEvent(repo: Repository, userId: string, input: unknown): Promise<Result<CycleEvent>> {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const parsed = eventSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the calendar event.");
   const membership = await activeMembership(repo, userId);
@@ -222,6 +251,8 @@ export async function saveEvent(repo: Repository, userId: string, input: unknown
 }
 
 export async function deleteEvent(repo: Repository, userId: string, id: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   const current = await repo.find("cycleEvents", { eq: { id, userId } });
   if (!current) return fail("That event was not found.");
   await repo.remove("cycleEvents", id);
@@ -229,6 +260,8 @@ export async function deleteEvent(repo: Repository, userId: string, id: string) 
 }
 
 export async function deleteCycleData(repo: Repository, userId: string) {
+  const denied = await trackerDenied(repo, userId);
+  if (denied) return fail(denied);
   await repo.removeWhere("cyclePeriods", { eq: { userId } });
   await repo.removeWhere("cycleCheckIns", { eq: { userId } });
   await repo.removeWhere("cyclePregnancyLogs", { eq: { userId } });
@@ -271,6 +304,7 @@ export async function loadOwnerCycle(repo: Repository, userId: string, now = new
 }
 
 export async function deliverCycleReminders(repo: Repository, userId: string, now = new Date()) {
+  if (await trackerDenied(repo, userId)) return;
   const snapshot = await loadOwnerCycle(repo, userId, now);
   if (!snapshot.stored) return;
   const yesterday = addDays(snapshot.today, -1);
@@ -292,14 +326,38 @@ export async function deliverCycleReminders(repo: Repository, userId: string, no
   }
 }
 
+export async function pauseCycleSharing(repo: Repository, userId: string) {
+  const grants = await repo.list("cycleShareGrants", { eq: { ownerId: userId } });
+  for (const grant of grants) {
+    if (!grant.revokedAt) await repo.update("cycleShareGrants", grant.id, { revokedAt: stamp() });
+  }
+  const profile = await storedProfile(repo, userId);
+  if (!profile) return;
+  await repo.update("cycleProfiles", userId, {
+    sharePhaseSummary: false,
+    sharePeriodSummary: false,
+    shareFertileSummary: false,
+    shareMoodSummary: false,
+    shareSymptomSummary: false,
+    shareIntimacySummary: false,
+    shareSelectedDetails: false,
+    updatedAt: stamp(),
+  });
+}
+
 export async function loadSharedCycle(repo: Repository, viewerId: string, now = new Date()) {
   const membership = await activeMembership(repo, viewerId);
-  if (!membership) return { partnerName: null, view: emptyPartnerView() };
+  if (!membership) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
   const partner = await otherPartner(repo, membership.coupleId, viewerId);
-  if (!partner || await isBlocked(repo, viewerId, partner.userId)) return { partnerName: null, view: emptyPartnerView() };
+  if (!partner || await isBlocked(repo, viewerId, partner.userId)) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
   const partnerProfile = await repo.find("profiles", { eq: { id: partner.userId } });
+  const partnerName = partnerProfile?.displayName ?? "Your partner";
+  const stored = await storedProfile(repo, partner.userId);
+  if (!tracksOwnCycle(partnerProfile?.gender) || !stored) {
+    return { partnerName, availability: "not_tracking" as const, today: null as string | null, view: emptyPartnerView() };
+  }
   const grants = (await repo.list("cycleShareGrants", { eq: { ownerId: partner.userId, partnerId: viewerId, coupleId: membership.coupleId } })).filter((grant) => !grant.revokedAt);
-  const ownerProfile = await profileOrBlank(repo, partner.userId, now);
+  const ownerProfile = stored;
   const today = calendarDay(ownerProfile.timeZone, now);
   const [periods, checkIns, events] = await Promise.all([
     repo.list("cyclePeriods", { eq: { userId: partner.userId } }),
@@ -315,14 +373,13 @@ export async function loadSharedCycle(repo: Repository, viewerId: string, now = 
     lutealLength: ownerProfile.lutealLength,
   });
   const sharedEvents = events.filter((event) => event.visibility !== "private" && (event.coupleId === null || event.coupleId === membership.coupleId));
-  return {
-    partnerName: partnerProfile?.displayName ?? "Your partner",
-    view: projectForPartner({ grants, estimate, checkIns, events: sharedEvents }),
-  };
+  const view = projectForPartner({ grants, estimate, periods, checkIns, events: sharedEvents });
+  const shared = Boolean(view.phaseSummary || view.periodSummary || view.fertileSummary || view.daily.length || view.events.length);
+  return { partnerName, availability: shared ? "shared" as const : "not_shared" as const, today, view };
 }
 
 function emptyPartnerView() {
-  return { periodSummary: null, fertileSummary: null, daily: [], events: [] };
+  return { phase: null, phaseSummary: null, periodSummary: null, fertileSummary: null, periodWindow: null, fertileWindow: null, daily: [], events: [] };
 }
 
 export async function exportCycleData(repo: Repository, userId: string) {

@@ -3,10 +3,12 @@ import { Bell, Heart, LifeBuoy, Lock, LogOut, Settings, Shield, Users } from "lu
 import { logoutAction, settingsAction } from "@/app/actions";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { BannerUpload } from "@/components/banner-upload";
+import { GenderField } from "@/components/gender-field";
 import { RelationshipStatusField } from "@/components/relationship-status";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth/session";
+import { genderLabel } from "@/lib/gender";
 import { getRepository } from "@/lib/data";
 
 export const metadata = { title: "Profile" };
@@ -19,8 +21,8 @@ const rows = [
   ["/support", "Help & Support", LifeBuoy],
 ] as const;
 
-export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  const { saved } = await searchParams;
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+  const { saved, error } = await searchParams;
   const user = await requireUser();
   const achievements = await (await getRepository()).list("userAchievements", { eq: { userId: user.profile.id } });
   const handle = user.profile.email.split("@")[0];
@@ -35,7 +37,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             </div>
             <div className="min-w-0 pb-6 sm:pb-7">
               <h1 className="font-serif text-4xl">{user.profile.displayName}</h1>
-              <p className="text-sm text-muted-foreground">@{handle}</p>
+              <p className="text-sm text-muted-foreground">@{handle} · {genderLabel(user.profile.gender)}</p>
               <p className="mt-2 text-sm text-rose">{user.preferences.locale === "fil" ? "Filipino" : "English"} · {achievements.length} achievements · {user.preferences.points} points</p>
             </div>
           </div>
@@ -43,6 +45,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       </section>
       <div className="grid w-full items-start gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-8">
         {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 lg:col-span-2" role="status">Profile saved.</p>}
+        {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive lg:col-span-2" role="alert">{error}</p>}
         <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-serif text-2xl">Profile settings</h2>
@@ -50,6 +53,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           </div>
           <input type="hidden" name="returnTo" value="/profile" />
           <label className="grid gap-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /></label>
+          <GenderField id="profile-gender" defaultValue={user.profile.gender} />
           <div className="grid gap-4 sm:grid-cols-2">
             <RelationshipStatusField label="Relationship" defaultValue={user.profile.relationshipStatus} />
             <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" defaultValue={user.profile.relationshipStartedOn ?? ""} /></label>

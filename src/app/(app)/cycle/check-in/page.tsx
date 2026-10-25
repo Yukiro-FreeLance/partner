@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { deleteCheckInAction } from "@/app/(app)/cycle/actions";
 import { CheckInForm } from "@/components/cycle/check-in-form";
+import { PersonalCycleNotice } from "@/components/cycle/partner-panel";
 import { CycleBlocked, CycleStatus } from "@/components/cycle/status";
 import { CycleSetup } from "@/components/cycle/setup";
 import { requireCyclePage } from "@/lib/cycle/access";
+import { tracksOwnCycle } from "@/lib/gender";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { formatDay, isIsoDate, compareDates } from "@/lib/cycle/dates";
 import { loadOwnerCycle } from "@/lib/services/cycle";
@@ -13,6 +15,7 @@ export const metadata = { title: "Daily check-in" };
 export default async function CheckInPage({ searchParams }: { searchParams: Promise<{ day?: string; saved?: string; error?: string }> }) {
   const access = await requireCyclePage();
   if (access.blocked) return <CycleBlocked />;
+  if (!tracksOwnCycle(access.user.profile.gender)) return <PersonalCycleNotice />;
   const query = await searchParams;
   let snapshot;
   try {

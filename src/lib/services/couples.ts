@@ -205,6 +205,7 @@ export async function leaveCouple(repo: Repository, userId: string): Promise<Res
   const cycleProfile = await repo.find("cycleProfiles", { eq: { userId } });
   if (cycleProfile) {
     await repo.update("cycleProfiles", userId, {
+      sharePhaseSummary: false,
       sharePeriodSummary: false,
       shareFertileSummary: false,
       shareMoodSummary: false,

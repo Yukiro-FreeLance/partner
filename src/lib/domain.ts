@@ -58,6 +58,8 @@ export type Profile = {
   interests: string[];
   preferredCategories: string[];
   role: "user" | "admin" | "super_admin";
+  gender?: "female" | "male" | "unspecified" | null;
+  accountStatus?: "active" | "archived" | "deleted";
   isDemo: boolean;
   emailVerified: boolean;
   createdAt: string;
@@ -541,6 +543,7 @@ export type CycleProfile = {
   typicalPeriodLength: number;
   lutealLength: number;
   externalEstimateConsent: boolean;
+  sharePhaseSummary: boolean;
   sharePeriodSummary: boolean;
   shareFertileSummary: boolean;
   shareMoodSummary: boolean;
@@ -632,7 +635,7 @@ export type CycleEvent = {
   updatedAt: string;
 };
 
-export type CycleShareScope = "period_summary" | "fertile_summary" | "mood_summary" | "symptom_summary" | "intimacy_summary" | "selected_details";
+export type CycleShareScope = "phase_summary" | "period_summary" | "fertile_summary" | "mood_summary" | "symptom_summary" | "intimacy_summary" | "selected_details";
 
 export type CycleShareGrant = {
   id: string;

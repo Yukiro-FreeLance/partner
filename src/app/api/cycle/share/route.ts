@@ -9,6 +9,7 @@ export async function POST(request: Request) {
   if (!result.ok) return cycleJson({ error: result.error }, 400);
   return cycleJson({
     profile: {
+      sharePhaseSummary: result.data.sharePhaseSummary,
       sharePeriodSummary: result.data.sharePeriodSummary,
       shareFertileSummary: result.data.shareFertileSummary,
       shareMoodSummary: result.data.shareMoodSummary,

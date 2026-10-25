@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { deleteEventAction, saveEventAction } from "@/app/(app)/cycle/actions";
+import { CalendarLegend, DayIdentifiers, DayMarkList, daySurface, describeDay, type CalendarFlags } from "@/components/cycle/calendar-legend";
+import { DayReadout } from "@/components/cycle/day-readout";
+import { PartnerCalendar } from "@/components/cycle/partner-calendar";
 import { CycleBlocked, CycleStatus } from "@/components/cycle/status";
 import { CycleSetup } from "@/components/cycle/setup";
 import { requireCyclePage } from "@/lib/cycle/access";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
-import { DRIVE_OPTIONS, MOOD_OPTIONS, optionLabel, SYMPTOM_OPTIONS } from "@/lib/cycle/copy";
-import { addDays, formatDay, formatDayShort, isIsoDate, monthGrid, weekDays } from "@/lib/cycle/dates";
+import { addDays, calendarDay, formatDay, formatDayShort, isIsoDate, monthGrid, weekDays } from "@/lib/cycle/dates";
+import { tracksOwnCycle } from "@/lib/gender";
 import { calendarMarks } from "@/lib/cycle/predict";
 import { loadOwnerCycle, loadSharedCycle } from "@/lib/services/cycle";
 
@@ -15,6 +18,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const access = await requireCyclePage();
   if (access.blocked) return <CycleBlocked />;
   const query = await searchParams;
+  if (!tracksOwnCycle(access.user.profile.gender)) {
+    try {
+      const shared = await loadSharedCycle(access.repo, access.user.profile.id);
+      const cursor = query.cursor && isIsoDate(query.cursor) ? query.cursor : shared.today ?? calendarDay("UTC");
+      const view = query.view === "week" ? "week" : "month";
+      return <PartnerCalendar shared={shared} view={view} cursor={cursor} />;
+    } catch (error) {
+      if (!isMissingCycleTable(error)) throw error;
+      return <CycleSetup />;
+    }
+  }
   let snapshot;
   let shared;
   try {
@@ -32,13 +46,30 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const cells = view === "week" ? weekDays(cursor).map((day) => ({ day, inMonth: true })) : month.cells;
   const selected = snapshot.checkIns.find((entry) => entry.day === cursor);
   const ownEvents = snapshot.events.filter((event) => event.day === cursor);
+  const checkInDays = new Set(snapshot.checkIns.map((entry) => entry.day));
+  const eventDays = new Set(snapshot.events.map((event) => event.day));
   const shift = view === "week" ? 7 : 30;
+  const flagsFor = (day: string, inMonth: boolean): CalendarFlags => {
+    const mark = marks[day];
+    return {
+      confirmedPeriod: Boolean(mark?.confirmedPeriod),
+      predictedPeriod: Boolean(mark?.predictedPeriod),
+      fertile: Boolean(mark?.fertile),
+      ovulation: Boolean(mark?.ovulation),
+      checkIn: checkInDays.has(day),
+      event: eventDays.has(day),
+      today: day === snapshot.today,
+      selected: day === cursor,
+      inMonth,
+    };
+  };
+  const selectedFlags = flagsFor(cursor, true);
   return (
     <div className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-4xl">Calendar</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Predicted days are outlines. Recorded period days are filled. Your partner only sees events and summaries you explicitly share.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Icons match the calendar key. Predicted days are estimates. Your partner only sees events and summaries you explicitly share.</p>
         </div>
         <div className="flex gap-2">
           <Link className={view === "month" ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground" : "inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm"} href={`/cycle/calendar?view=month&cursor=${cursor}`}>Month</Link>
@@ -51,41 +82,37 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <p className="font-serif text-xl">{view === "week" ? formatDay(cursor) : month.label}</p>
         <Link className="inline-flex min-h-11 items-center rounded-full border px-4 text-sm" href={`/cycle/calendar?view=${view}&cursor=${addDays(cursor, shift)}`}>Next</Link>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day}>{day}</div>)}</div>
+      <CalendarLegend />
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="py-1">{day}</div>)}</div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell) => {
-          const mark = marks[cell.day];
-          const hasEntry = snapshot.checkIns.some((entry) => entry.day === cell.day) || snapshot.events.some((event) => event.day === cell.day);
+          const flags = flagsFor(cell.day, cell.inMonth);
           return (
-            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} className={`flex min-h-16 flex-col items-center justify-center rounded-2xl text-sm ${cell.day === cursor ? "ring-2 ring-primary" : ""} ${cell.inMonth ? "bg-white" : "bg-transparent text-muted-foreground"} ${mark?.confirmedPeriod ? "bg-[#ffe4e6]" : ""} ${mark?.predictedPeriod ? "border border-dashed border-[#be123c]" : ""} ${mark?.fertile ? "shadow-[inset_0_0_0_2px_#c4b5fd]" : ""}`} aria-current={cell.day === cursor ? "date" : undefined}>
-              <span>{Number(cell.day.slice(-2))}</span>
-              {mark?.ovulation && <span className="text-[10px] text-[#6d28d9]">ovulation</span>}
-              {hasEntry && <span className="size-1.5 rounded-full bg-primary" />}
+            <Link key={cell.day} href={`/cycle/calendar?view=${view}&cursor=${cell.day}`} aria-label={describeDay(cell.day, flags)} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-1 text-sm ${daySurface(flags)}`} aria-current={flags.selected ? "date" : undefined}>
+              <span className={flags.today ? "font-semibold text-primary" : ""}>{Number(cell.day.slice(-2))}</span>
+              <DayIdentifiers flags={flags} />
             </Link>
           );
         })}
       </div>
-      <ul className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <li>Filled rose: recorded period</li>
-        <li>Dashed rose: predicted period</li>
-        <li>Lavender outline: predicted fertile window</li>
-        <li>Ovulation label: predicted only</li>
-      </ul>
       <section className="panel grid gap-3 p-5">
-        <h2 className="font-serif text-2xl">{formatDay(cursor)}</h2>
-        {selected ? <p className="text-sm">Mood {optionLabel(MOOD_OPTIONS, selected.mood) ?? "not logged"} · Energy {selected.energy ?? "not logged"} · Sex drive {optionLabel(DRIVE_OPTIONS, selected.sexDrive) ?? "not logged"} · Symptoms {[...selected.symptoms.map((item) => optionLabel(SYMPTOM_OPTIONS, item) ?? item), ...selected.customSymptoms].join(", ") || "none"}</p> : <p className="text-sm text-muted-foreground">No check-in on this day.</p>}
-        {selected?.notes && <p className="text-sm">Journal: {selected.notes}</p>}
-        <Link className="text-sm font-medium text-primary" href={`/cycle/check-in?day=${cursor}`}>Open check-in</Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-serif text-2xl">{formatDay(cursor)}</h2>
+          <Link className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm text-primary-foreground" href={`/cycle/check-in?day=${cursor}`}>{selected ? "Edit check-in" : "Add check-in"}</Link>
+        </div>
+        <DayMarkList flags={selectedFlags} />
+        <DayReadout entry={selected} />
         <ul className="grid gap-2">
           {ownEvents.map((event) => (
             <li key={event.id} className="rounded-2xl bg-[#faf5ff] p-3 text-sm">
               <p className="font-medium">{event.title}</p>
               {event.body && <p>{event.body}</p>}
-              <p className="text-xs text-muted-foreground">Visibility: {event.visibility}</p>
+              <p className="text-xs text-muted-foreground">{event.visibility === "private" ? "Private to me" : event.visibility === "summary" ? "Title only" : event.visibility === "selected" ? "Title and note" : "Shared event"}</p>
               <form action={deleteEventAction}><input type="hidden" name="id" value={event.id} /><button className="min-h-11 text-sm underline" type="submit">Delete</button></form>
             </li>
           ))}
         </ul>
+        <h3 className="font-serif text-lg">Add an event</h3>
         <form action={saveEventAction} className="grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="day" value={cursor} />
           <label className="grid gap-1 text-sm sm:col-span-2">Event title<input name="title" required maxLength={80} className="h-11 rounded-2xl border px-3" /></label>
@@ -105,6 +132,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <section className="panel p-5">
         <h2 className="font-serif text-2xl">Shared with you</h2>
         {!shared.partnerName && <p className="mt-2 text-sm text-muted-foreground">Pair with a partner before shared events can appear.</p>}
+        {shared.partnerName && shared.availability === "not_tracking" && <p className="mt-2 text-sm">{shared.partnerName} has not turned on cycle tracking.</p>}
+        {shared.partnerName && shared.availability === "not_shared" && <p className="mt-2 text-sm">{shared.partnerName} has not shared cycle information.</p>}
+        {shared.view.phaseSummary && <p className="mt-2 text-sm">{shared.view.phaseSummary}</p>}
         {shared.partnerName && <p className="mt-2 text-sm">{shared.view.periodSummary ?? `${shared.partnerName} has not shared period dates.`}</p>}
         {shared.view.fertileSummary && <p className="mt-1 text-sm">{shared.view.fertileSummary}</p>}
         <ul className="mt-3 grid gap-2">

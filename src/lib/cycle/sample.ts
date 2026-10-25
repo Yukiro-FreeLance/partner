@@ -10,6 +10,7 @@ export function blankCycleProfile(userId: string, now: string, timeZone = "UTC")
     typicalPeriodLength: 5,
     lutealLength: 14,
     externalEstimateConsent: false,
+    sharePhaseSummary: false,
     sharePeriodSummary: false,
     shareFertileSummary: false,
     shareMoodSummary: false,

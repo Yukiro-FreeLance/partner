@@ -228,13 +228,23 @@ export async function deleteAccount(repo: Repository, userId: string) {
   }
   const { deleteCycleData } = await import("@/lib/services/cycle");
   await deleteCycleData(repo, userId);
-  const tables = ["userAnswers", "answerPredictions", "personalityAnswers", "personalityResults", "personalitySessions", "cardActivity", "savedQuestions", "notifications", "userAchievements", "reports", "emailTokens", "loginAttempts"] as const;
-  for (const table of tables) {
-    const key = table === "reports" ? "reporterId" : table === "emailTokens" || table === "loginAttempts" ? null : "userId";
-    if (key) await repo.removeWhere(table, { eq: { [key]: userId } as never });
+  const owned = [
+    ["userAnswers", "userId"],
+    ["answerPredictions", "predictorId"],
+    ["answerPredictions", "subjectId"],
+    ["personalityAnswers", "userId"],
+    ["personalityResults", "userId"],
+    ["personalitySessions", "userId"],
+    ["cardActivity", "userId"],
+    ["savedQuestions", "userId"],
+    ["notifications", "userId"],
+    ["userAchievements", "userId"],
+    ["reports", "reporterId"],
+    ["emailTokens", "userId"],
+  ] as const;
+  for (const [table, key] of owned) {
+    await repo.removeWhere(table, { eq: { [key]: userId } });
   }
-  await repo.removeWhere("reports", { eq: { reporterId: userId } });
-  await repo.removeWhere("emailTokens", { eq: { userId } });
   await repo.removeWhere("userBlocks", { eq: { blockerId: userId } });
   await repo.remove("credentials", userId);
   await repo.remove("userPreferences", userId);
@@ -276,7 +286,7 @@ export async function adminStats(repo: Repository) {
     repo.list("reports", { eq: { status: "open" } }),
   ]);
   return {
-    people: profiles.filter((profile) => !profile.isDemo).length,
+    people: profiles.filter((profile) => !profile.isDemo && (profile.accountStatus ?? "active") === "active").length,
     couples: couples.filter((couple) => couple.status === "active").length,
     completedSessions: sessions.length,
     questions: questions.filter((question) => question.isActive).length,
