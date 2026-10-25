@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/overlays";
+import { AppShare } from "@/components/app-share";
 import { Button } from "@/components/ui/button";
 
 const sectionLinks = [
@@ -54,6 +55,7 @@ export function SiteHeader() {
                 <DialogClose asChild>
                   <Link href="/login" className="flex min-h-11 items-center rounded-2xl px-2 hover:bg-secondary">Log in</Link>
                 </DialogClose>
+                <AppShare layout="stack" />
                 <DialogClose asChild>
                   <Link href="/register" className="mt-2 flex min-h-11 items-center justify-center rounded-full bg-primary text-primary-foreground">Get Started</Link>
                 </DialogClose>
@@ -76,6 +78,7 @@ export function SiteFooter() {
         </div>
         <div className="flex flex-col gap-4 md:items-end">
           <Button asChild variant="secondary" className="bg-white text-primary hover:bg-white/90"><Link href="/register">Start Your Couple Journey</Link></Button>
+          <AppShare tone="on-dark" />
           <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Footer">
             {footerLinks.map(([label, href]) => (
               <Link key={href} href={href} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{label}</Link>

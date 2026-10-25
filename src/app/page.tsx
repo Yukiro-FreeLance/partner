@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Brain, Gamepad2, Heart, ImageIcon, Lock, Shield, Sparkles } from "lucide-react";
 import { ConnectionPreview, FoodQuizPreview, HeroPhones, PersonalityPreview, PhoneFrame, StoryPreview } from "@/components/landing-previews";
 import { PreviewQuiz } from "@/components/preview-quiz";
+import { AppShare } from "@/components/app-share";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,6 +93,9 @@ export default function LandingPage() {
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg"><Link data-testid="start-journey" href="/register">Start Your Couple Journey <ArrowRight className="size-4" aria-hidden /></Link></Button>
                 <Button asChild size="lg" variant="outline" className="bg-white/80"><Link href="/join"><Heart className="size-4 text-rose" aria-hidden />Join Your Partner</Link></Button>
+              </div>
+              <div className="mt-3">
+                <AppShare />
               </div>
               <ul className="mt-6 flex flex-wrap gap-2 text-xs text-[#6b6280]">
                 {[
