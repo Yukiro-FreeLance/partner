@@ -72,9 +72,9 @@ export default async function HomePage() {
   const [couple, partner, report, sessions, memories, invites, notes, challenges, personality, shared, ownCycle, todayQuestion] = await Promise.all([
     coupleId ? repo.find("couples", { eq: { id: coupleId } }) : Promise.resolve(null),
     loadPartner(repo, coupleId, user.profile.id),
-    membership ? getConnectionReport(repo, user.profile.id) : Promise.resolve(null),
+    membership ? getConnectionReport(repo, user.profile.id, { scoresOnly: true }) : Promise.resolve(null),
     listMySessions(repo, user.profile.id),
-    coupleId ? repo.list("coupleMemories", { eq: { coupleId } }) : Promise.resolve([]),
+    coupleId ? repo.list("coupleMemories", { eq: { coupleId } }, { orderBy: "createdAt", descending: true, limit: 3 }) : Promise.resolve([]),
     coupleId ? repo.list("coupleInvitations", { eq: { coupleId, status: "pending" } }) : Promise.resolve([]),
     repo.list("notifications", { eq: { userId: user.profile.id } }, { orderBy: "createdAt", descending: true, limit: 5 }),
     repo.list("coupleChallenges", { eq: { isActive: true } }),

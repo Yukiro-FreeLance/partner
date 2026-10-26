@@ -24,6 +24,9 @@ export async function proxy(request: NextRequest) {
     url.search = downloadRewrite.search;
     return NextResponse.rewrite(url);
   }
+  const appSession = Boolean(request.cookies.get("cs_session")?.value);
+  if (appSession || !isProtected(pathname)) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
   let supabaseUser = false;
   if (supabaseUrl() && supabaseAnonKey()) {

@@ -1,6 +1,10 @@
+"use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { LoaderCircle } from "lucide-react";
+import { useFormStatus } from "react-dom";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -26,9 +30,23 @@ const buttonVariants = cva(
   },
 );
 
-export function Button({ className, variant, size, asChild = false, ...props }: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : "button";
-  return <Comp className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+export function Button({ className, variant, size, asChild = false, type, disabled, children, ...props }: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+  const { pending } = useFormStatus();
+  const busy = pending && !asChild && type !== "button" && type !== "reset";
+  const classNameValue = cn(buttonVariants({ variant, size, className }));
+  if (asChild) {
+    return (
+      <Slot className={classNameValue} {...props}>
+        {children}
+      </Slot>
+    );
+  }
+  return (
+    <button className={classNameValue} type={type} disabled={disabled || busy} aria-busy={busy || undefined} {...props}>
+      {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+      {children}
+    </button>
+  );
 }
 
 export { buttonVariants };

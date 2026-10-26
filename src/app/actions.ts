@@ -8,7 +8,7 @@ import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
 import { runWrite } from "@/lib/data/repository";
 import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, resendVerification, resetPassword, verifyEmailToken } from "@/lib/auth/accounts";
-import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, getCurrentUser, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
+import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, forgetAppSession, getCurrentUser, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
 import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
@@ -523,6 +523,7 @@ export async function settingsAction(formData: FormData) {
   const store = await cookies();
   store.set("theme", theme, { path: "/", maxAge: 60 * 60 * 24 * 365 });
   store.set("locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  forgetAppSession(user.profile.id);
   revalidatePath("/settings");
   revalidatePath("/profile");
   revalidatePath("/home");

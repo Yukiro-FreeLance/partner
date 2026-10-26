@@ -111,6 +111,13 @@ h1, h2, h3, h4, .font-serif {
   }
 }
 
+@keyframes page-load {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(360%); }
+}
+
+.page-load-bar { animation: page-load 1s ease-in-out infinite; }
+
 .safe-pb { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 
 @media (min-width: 1024px) {

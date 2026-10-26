@@ -31,24 +31,59 @@ function latest<T extends { questionId: string; updatedAt: string }>(rows: T[]) 
   return map;
 }
 
-export async function getConnectionReport(repo: Repository, viewerId: string): Promise<ConnectionReport | null> {
+function questionIds(groups: { questionId: string }[][]) {
+  const ids = new Set<string>();
+  for (const group of groups) for (const row of group) ids.add(row.questionId);
+  return [...ids];
+}
+
+const REPORT_FRESH_MS = 8000;
+const reportCache = globalThis as { __connectionReports?: Map<string, { at: number; scoresOnly: boolean; report: ConnectionReport }> };
+
+function cachedReports() {
+  reportCache.__connectionReports ??= new Map();
+  return reportCache.__connectionReports;
+}
+
+export async function getConnectionReport(repo: Repository, viewerId: string, settings?: { scoresOnly?: boolean }): Promise<ConnectionReport | null> {
+  const scoresOnly = settings?.scoresOnly === true;
+  const hit = cachedReports().get(viewerId);
+  if (hit && Date.now() - hit.at < REPORT_FRESH_MS && (!hit.scoresOnly || scoresOnly)) return hit.report;
+  const report = await buildConnectionReport(repo, viewerId, scoresOnly);
+  if (report) cachedReports().set(viewerId, { at: Date.now(), scoresOnly, report });
+  return report;
+}
+
+async function buildConnectionReport(repo: Repository, viewerId: string, scoresOnly: boolean): Promise<ConnectionReport | null> {
   const membership = await activeMembership(repo, viewerId);
   if (!membership) return null;
-  const partner = await otherPartner(repo, membership.coupleId, viewerId);
   const coupleId = membership.coupleId;
-  const [partnerProfile, questions, options, categories, myAnswerRows, partnerAnswerRows, reveals, predictions, partnerPredictions, rounds, marks] = await Promise.all([
-    partner ? repo.find("profiles", { eq: { id: partner.userId } }) : Promise.resolve(null),
-    repo.list("questions", {}),
-    repo.list("questionOptions", {}),
-    repo.list("questionCategories", {}),
+  const [partner, myAnswerRows, reveals, predictions, rounds, marks] = await Promise.all([
+    otherPartner(repo, coupleId, viewerId),
     repo.list("userAnswers", { eq: { userId: viewerId, coupleId } }),
-    partner ? repo.list("userAnswers", { eq: { userId: partner.userId, coupleId } }) : Promise.resolve([]),
     repo.list("answerReveals", { eq: { coupleId } }),
     repo.list("answerPredictions", { eq: { predictorId: viewerId, coupleId, kind: "partner" } }),
-    partner ? repo.list("answerPredictions", { eq: { predictorId: partner.userId, coupleId, kind: "partner" } }) : Promise.resolve([]),
     repo.list("quizRounds", { eq: { coupleId, resultsShared: true } }),
     repo.list("similarityMarks", { eq: { coupleId } }),
   ]);
+  const earlyIds = questionIds([myAnswerRows, predictions]);
+  const [partnerProfile, partnerAnswerRows, partnerPredictions, earlyQuestions, categories, earlyOptions] = await Promise.all([
+    partner ? repo.find("profiles", { eq: { id: partner.userId } }) : Promise.resolve(null),
+    partner ? repo.list("userAnswers", { eq: { userId: partner.userId, coupleId } }) : Promise.resolve([]),
+    partner ? repo.list("answerPredictions", { eq: { predictorId: partner.userId, coupleId, kind: "partner" } }) : Promise.resolve([]),
+    earlyIds.length ? repo.list("questions", { in: { id: earlyIds } }) : Promise.resolve([]),
+    scoresOnly ? Promise.resolve([]) : repo.list("questionCategories", {}),
+    !scoresOnly && earlyIds.length ? repo.list("questionOptions", { in: { questionId: earlyIds } }) : Promise.resolve([]),
+  ]);
+  const missingIds = questionIds([partnerAnswerRows, partnerPredictions]).filter((id) => !earlyIds.includes(id));
+  const [extraQuestions, extraOptions] = missingIds.length
+    ? await Promise.all([
+        repo.list("questions", { in: { id: missingIds } }),
+        scoresOnly ? Promise.resolve([]) : repo.list("questionOptions", { in: { questionId: missingIds } }),
+      ])
+    : [[], []];
+  const questions = [...earlyQuestions, ...extraQuestions];
+  const options = [...earlyOptions, ...extraOptions];
   const myAnswers = latest(myAnswerRows);
   const partnerAnswers = latest(partnerAnswerRows);
   const visible = new Set(reveals.filter((reveal) => reveal.viewerId === viewerId).map((reveal) => `${reveal.ownerId}:${reveal.questionId}`));
@@ -68,8 +103,8 @@ export async function getConnectionReport(repo: Repository, viewerId: string): P
     if (guess && visibleActual) {
       const comparison = compareResponses(question, visibleActual, guess, mark);
       mineComparisons.push(comparison);
-      pushKnowledgeInsights(insights, question, comparison, partnerProfile?.displayName ?? "your partner");
-    } else if (guess && !visibleActual) {
+      if (!scoresOnly) pushKnowledgeInsights(insights, question, comparison, partnerProfile?.displayName ?? "your partner");
+    } else if (!scoresOnly && guess && !visibleActual) {
       insights.push({
         id: `ask-${question.id}`,
         kind: "ask",
@@ -90,8 +125,8 @@ export async function getConnectionReport(repo: Repository, viewerId: string): P
       if (mutual && myAnswer && visibleActual) {
         const preference = compareResponses(question, myAnswer, visibleActual, mark);
         preferenceComparisons.push(preference);
-        pushPreferenceInsights(insights, question, preference, categories.find((category) => category.id === question.categoryId)?.slug ?? "", options.filter((option) => option.questionId === question.id), myAnswer.payload);
-      } else if (myAnswer && !visibleActual) {
+        if (!scoresOnly) pushPreferenceInsights(insights, question, preference, categories.find((category) => category.id === question.categoryId)?.slug ?? "", options.filter((option) => option.questionId === question.id), myAnswer.payload);
+      } else if (!scoresOnly && myAnswer && !visibleActual) {
         insights.push({
           id: `ask-self-${question.id}`,
           kind: "ask",

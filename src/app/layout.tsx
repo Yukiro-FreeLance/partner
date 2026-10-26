@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Montserrat, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
+import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { siteOrigin } from "@/lib/site-origin";
 import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 import "./globals.css";
@@ -63,6 +65,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale} className={`${poppins.variable} ${montserrat.variable} h-full antialiased ${dark ? "dark" : ""}`}>
       <body className="min-h-full">
         {children}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <Toaster richColors position="top-center" />
       </body>
     </html>

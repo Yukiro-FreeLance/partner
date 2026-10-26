@@ -219,6 +219,18 @@ async function restoreSessionProfile(repo: Awaited<ReturnType<typeof getReposito
 
 export type AppSession = { user: CurrentUser; membership: CoupleMember | null; unread: number };
 
+const SESSION_FRESH_MS = 5000;
+const sessionCache = globalThis as { __appSessions?: Map<string, { at: number; value: AppSession }> };
+
+function cachedSessions() {
+  sessionCache.__appSessions ??= new Map();
+  return sessionCache.__appSessions;
+}
+
+export function forgetAppSession(userId: string) {
+  cachedSessions().delete(userId);
+}
+
 async function shellFor(repo: Awaited<ReturnType<typeof getRepository>>, userId: string) {
   const [membership, unread] = await Promise.all([
     repo.find("coupleMembers", { eq: { userId, status: "active" } }),
@@ -230,6 +242,14 @@ async function shellFor(repo: Awaited<ReturnType<typeof getRepository>>, userId:
 export const loadAppSession = cache(async function loadAppSession(): Promise<AppSession | null> {
   const session = await readSession();
   if (session) {
+    const impersonating = Boolean((await cookies()).get(IMPERSONATION_COOKIE)?.value);
+    if (!impersonating) {
+      const hit = cachedSessions().get(session.userId);
+      if (hit && Date.now() - hit.at < SESSION_FRESH_MS) {
+        rememberMembership(hit.value.user.profile.id, hit.value.membership);
+        return hit.value;
+      }
+    }
     const repo = await getRepository();
     const [byId, storedPreferences, actorShell] = await Promise.all([
       repo.find("profiles", { eq: { id: session.userId } }),
@@ -247,7 +267,9 @@ export const loadAppSession = cache(async function loadAppSession(): Promise<App
     const preferences = samePerson && storedPreferences ? storedPreferences : await preferencesFor(repo, effective.id);
     const shell = samePerson ? actorShell : await shellFor(repo, effective.id);
     rememberMembership(effective.id, shell.membership);
-    return { user: { profile: effective, preferences, actor: target ? synced : null }, membership: shell.membership, unread: shell.unread };
+    const loaded = { user: { profile: effective, preferences, actor: target ? synced : null }, membership: shell.membership, unread: shell.unread };
+    if (!loaded.user.actor) cachedSessions().set(loaded.user.profile.id, { at: Date.now(), value: loaded });
+    return loaded;
   }
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
