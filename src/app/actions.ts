@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { isSupabaseConfigured } from "@/lib/config";
+import { isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
 import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
 import { runWrite } from "@/lib/data/repository";
@@ -32,6 +32,11 @@ function isNextControlFlow(error: unknown) {
 
 function formString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
+}
+
+function accountRole(value: string) {
+  if (value === "user" || value === "admin" || value === "super_admin") return value;
+  return null;
 }
 
 async function mailedOrLocal(input: { to: string; subject: string; intro: string; path: string; localMessage: string; sentMessage: string }): Promise<FormState> {
@@ -613,7 +618,7 @@ export async function createMemberAction(formData: FormData) {
   const displayName = formString(formData, "displayName").trim();
   const email = formString(formData, "email").trim().toLowerCase();
   const password = formString(formData, "password");
-  const role = formString(formData, "role") === "admin" ? "admin" : "user";
+  const role = accountRole(formString(formData, "role")) ?? "user";
   const problem = !displayName || displayName.length > 40
     ? "Add a name of 40 characters or fewer."
     : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -635,12 +640,14 @@ export async function setMemberRoleAction(formData: FormData) {
   const actor = user.actor ?? user.profile;
   if (actor.role !== "super_admin") redirect("/home");
   const targetId = formString(formData, "userId");
-  const role = formString(formData, "role") === "admin" ? "admin" : "user";
+  const role = accountRole(formString(formData, "role"));
+  if (!role) redirect("/admin/users?error=" + encodeURIComponent("Choose a member, admin, or super admin role."));
   if (!targetId || targetId === actor.id) redirect("/admin/users?error=" + encodeURIComponent("You cannot change your own role."));
   const repo = await getRepository();
   const target = await repo.find("profiles", { eq: { id: targetId } });
   if (!target) redirect("/admin/users?error=" + encodeURIComponent("That account is not on this server. Open the list again and save the role."));
-  if (target.isDemo || target.role === "super_admin") redirect("/admin/users?error=" + encodeURIComponent("That role cannot be changed."));
+  if (target.isDemo) redirect("/admin/users?error=" + encodeURIComponent("Demo profiles stay members."));
+  if (isSuperAdminEmail(target.email) && role !== "super_admin") redirect("/admin/users?error=" + encodeURIComponent("The platform owner stays a super admin."));
   await repo.update("profiles", target.id, { role, updatedAt: new Date().toISOString() });
   await writeAudit(repo, actor.id, `set role ${target.id} ${role}`);
   revalidatePath("/admin/users");

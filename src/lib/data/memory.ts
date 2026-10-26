@@ -78,6 +78,9 @@ export function createMemoryRepository(initial?: Database): Repository & { snaps
       if (options?.limit) list = list.slice(0, options.limit);
       return list.map((row) => structuredClone(row));
     },
+    async count(table, where) {
+      return rows(table).filter((row) => matches(row, where)).length;
+    },
     async find(table, where) {
       const found = rows(table).find((row) => matches(row, where));
       return found ? structuredClone(found) : null;

@@ -23,6 +23,7 @@ export function CreateUserDialog({ defaultOpen = false, error }: { defaultOpen?:
             <select name="role" defaultValue="user" className="h-11 rounded-2xl border bg-white px-3 text-sm">
               <option value="user">Member</option>
               <option value="admin">Admin</option>
+              <option value="super_admin">Super admin</option>
             </select>
           </label>
           <Button type="submit">Create user</Button>

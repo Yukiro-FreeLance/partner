@@ -1,4 +1,4 @@
-import type { AnswerPayload, Question, UserAnswer } from "@/lib/domain";
+import type { AnswerPayload, Question } from "@/lib/domain";
 import type { Repository } from "@/lib/data/repository";
 import { describeAnswer } from "@/lib/answers";
 import { compareResponses, combineSummaries, summarize, type Comparison, type ScoreSummary } from "@/lib/scoring";
@@ -35,21 +35,24 @@ export async function getConnectionReport(repo: Repository, viewerId: string): P
   const membership = await activeMembership(repo, viewerId);
   if (!membership) return null;
   const partner = await otherPartner(repo, membership.coupleId, viewerId);
-  const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
-  const questions = await repo.list("questions", {});
-  const options = await repo.list("questionOptions", {});
-  const categories = await repo.list("questionCategories", {});
-  const myAnswers = latest(await repo.list("userAnswers", { eq: { userId: viewerId, coupleId: membership.coupleId } }));
-  const partnerAnswers = partner ? latest(await repo.list("userAnswers", { eq: { userId: partner.userId, coupleId: membership.coupleId } })) : new Map<string, UserAnswer>();
-  const reveals = await repo.list("answerReveals", { eq: { coupleId: membership.coupleId } });
+  const coupleId = membership.coupleId;
+  const [partnerProfile, questions, options, categories, myAnswerRows, partnerAnswerRows, reveals, predictions, partnerPredictions, rounds, marks] = await Promise.all([
+    partner ? repo.find("profiles", { eq: { id: partner.userId } }) : Promise.resolve(null),
+    repo.list("questions", {}),
+    repo.list("questionOptions", {}),
+    repo.list("questionCategories", {}),
+    repo.list("userAnswers", { eq: { userId: viewerId, coupleId } }),
+    partner ? repo.list("userAnswers", { eq: { userId: partner.userId, coupleId } }) : Promise.resolve([]),
+    repo.list("answerReveals", { eq: { coupleId } }),
+    repo.list("answerPredictions", { eq: { predictorId: viewerId, coupleId, kind: "partner" } }),
+    partner ? repo.list("answerPredictions", { eq: { predictorId: partner.userId, coupleId, kind: "partner" } }) : Promise.resolve([]),
+    repo.list("quizRounds", { eq: { coupleId, resultsShared: true } }),
+    repo.list("similarityMarks", { eq: { coupleId } }),
+  ]);
+  const myAnswers = latest(myAnswerRows);
+  const partnerAnswers = latest(partnerAnswerRows);
   const visible = new Set(reveals.filter((reveal) => reveal.viewerId === viewerId).map((reveal) => `${reveal.ownerId}:${reveal.questionId}`));
-  const predictions = await repo.list("answerPredictions", { eq: { predictorId: viewerId, coupleId: membership.coupleId, kind: "partner" } });
-  const partnerPredictions = partner
-    ? await repo.list("answerPredictions", { eq: { predictorId: partner.userId, coupleId: membership.coupleId, kind: "partner" } })
-    : [];
-  const rounds = await repo.list("quizRounds", { eq: { coupleId: membership.coupleId, resultsShared: true } });
   const sharedRounds = new Set(rounds.map((round) => round.id));
-  const marks = await repo.list("similarityMarks", { eq: { coupleId: membership.coupleId } });
 
   const mineComparisons: Comparison[] = [];
   const partnerComparisons: Comparison[] = [];

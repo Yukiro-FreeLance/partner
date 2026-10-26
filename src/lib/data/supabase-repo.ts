@@ -21,6 +21,13 @@ export function createSupabaseRepository(): Repository {
       if (error) throw new Error(error.message);
       return (data ?? []).map((row) => keysToCamel<Row<TableName>>(row)) as Row<typeof table>[];
     },
+    async count(table, where) {
+      let query = client.from(toSnake(table)).select("*", { count: "exact", head: true });
+      query = applyWhere(query, where);
+      const { count, error } = await query;
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
     async find(table, where) {
       const rows = await repo.list(table, where, { limit: 1 });
       return rows[0] ?? null;

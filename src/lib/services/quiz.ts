@@ -165,7 +165,8 @@ async function findPartnerRound(
   const rounds = (await repo.list("quizRounds", { eq: { coupleId, mode: input.mode } }))
     .filter((round) => round.title === title && [...round.categories].sort().join(",") === categories)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const sessions = await repo.list("quizSessions", {});
+  if (!rounds.length) return null;
+  const sessions = await repo.list("quizSessions", { in: { roundId: rounds.map((round) => round.id) } });
   for (const round of rounds) {
     const mine = sessions.find((session) => session.roundId === round.id && session.userId === userId);
     if (mine?.status === "completed") continue;
@@ -510,11 +511,19 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
   if (!access.ok) return access;
   if (round.mode === "solo" && round.createdBy !== viewerId && !round.resultsShared) return fail("This practice quiz is still private.");
   await openReveals(repo, round.id, { snapshots: false });
-  const current = (await repo.find("quizRounds", { eq: { id: roundId } })) ?? round;
-  const questions = await roundQuestions(repo, current.id);
-  const session = await repo.find("quizSessions", { eq: { roundId, userId: viewerId } });
-  const partner = await otherPartner(repo, current.coupleId, viewerId);
-  const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
+  const [currentRow, questions, session, partnerBundle] = await Promise.all([
+    repo.find("quizRounds", { eq: { id: roundId } }),
+    roundQuestions(repo, round.id),
+    repo.find("quizSessions", { eq: { roundId, userId: viewerId } }),
+    (async () => {
+      const member = await otherPartner(repo, round.coupleId, viewerId);
+      const profile = member ? await repo.find("profiles", { eq: { id: member.userId } }) : null;
+      return { member, profile };
+    })(),
+  ]);
+  const current = currentRow ?? round;
+  const partner = partnerBundle.member;
+  const partnerProfile = partnerBundle.profile;
   const viewerDone = session?.status === "completed";
   const [viewerAnswers, partnerAnswers, predictions, partnerSessions] = await Promise.all([
     repo.list("userAnswers", { eq: { userId: viewerId, coupleId: current.coupleId } }),
@@ -637,7 +646,8 @@ export async function listRoundCards(repo: Repository, userId: string) {
   const membership = await activeMembership(repo, userId);
   if (!membership) return [];
   const rounds = await repo.list("quizRounds", { eq: { coupleId: membership.coupleId } });
-  const sessions = await repo.list("quizSessions", {});
+  if (!rounds.length) return [];
+  const sessions = await repo.list("quizSessions", { in: { roundId: rounds.map((round) => round.id) } });
   return rounds
     .map((round) => {
       const mine = sessions.find((session) => session.roundId === round.id && session.userId === userId) ?? null;
@@ -650,8 +660,10 @@ export async function listRoundCards(repo: Repository, userId: string) {
 export async function listMySessions(repo: Repository, userId: string) {
   const membership = await activeMembership(repo, userId);
   if (!membership) return [];
-  const sessions = await repo.list("quizSessions", { eq: { userId } });
-  const rounds = await repo.list("quizRounds", { eq: { coupleId: membership.coupleId } });
+  const [sessions, rounds] = await Promise.all([
+    repo.list("quizSessions", { eq: { userId } }),
+    repo.list("quizRounds", { eq: { coupleId: membership.coupleId } }),
+  ]);
   return sessions
     .map((session) => ({ session, round: rounds.find((round) => round.id === session.roundId) ?? null }))
     .filter((item): item is { session: QuizSession; round: QuizRound } => Boolean(item.round))

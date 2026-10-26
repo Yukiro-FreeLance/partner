@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { isSupabaseConfigured } from "@/lib/config";
 import { getLocalRepository } from "@/lib/data/local";
 import type { Repository } from "@/lib/data/repository";
@@ -8,7 +9,7 @@ import { isMissingColumn, isMissingCycleTable } from "@/lib/cycle/errors";
 
 const staff = globalThis as { __couplesyncReady?: Promise<void> };
 
-export async function getRepository(): Promise<Repository> {
+export const getRepository = cache(async function getRepository(): Promise<Repository> {
   const repo = isSupabaseConfigured() ? createSupabaseRepository() : await getLocalRepository();
   staff.__couplesyncReady ??= (async () => {
     const sample = await repo.list("questions", {}, { limit: 1 });
@@ -29,4 +30,4 @@ export async function getRepository(): Promise<Repository> {
   );
   await staff.__couplesyncReady;
   return repo;
-}
+});

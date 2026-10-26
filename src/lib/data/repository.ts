@@ -24,6 +24,7 @@ export type ListOptions = {
 export interface Repository {
   kind: "memory" | "supabase";
   list<T extends TableName>(table: T, where?: Where<Row<T>>, options?: ListOptions): Promise<Row<T>[]>;
+  count<T extends TableName>(table: T, where?: Where<Row<T>>): Promise<number>;
   find<T extends TableName>(table: T, where: Where<Row<T>>): Promise<Row<T> | null>;
   insert<T extends TableName>(table: T, row: Row<T>): Promise<Row<T>>;
   update<T extends TableName>(table: T, id: string, patch: Partial<Row<T>>): Promise<Row<T>>;

@@ -1,9 +1,12 @@
+import { rememberedMembership } from "@/lib/auth/request-scope";
 import type { CoupleMember } from "@/lib/domain";
 import type { Repository } from "@/lib/data/repository";
 import { sendNotice } from "@/lib/email";
 import { fail, ok, type Result } from "@/lib/result";
 
 export async function activeMembership(repo: Repository, userId: string) {
+  const remembered = rememberedMembership(userId);
+  if (remembered.hit) return remembered.membership;
   return repo.find("coupleMembers", { eq: { userId, status: "active" } });
 }
 
@@ -23,12 +26,11 @@ export async function otherPartner(repo: Repository, coupleId: string, userId: s
 }
 
 export async function isBlocked(repo: Repository, leftId: string, rightId: string) {
-  const blocks = await repo.list("userBlocks", {});
-  return blocks.some(
-    (block) =>
-      (block.blockerId === leftId && block.blockedId === rightId) ||
-      (block.blockerId === rightId && block.blockedId === leftId),
-  );
+  const [left, right] = await Promise.all([
+    repo.find("userBlocks", { eq: { blockerId: leftId, blockedId: rightId } }),
+    repo.find("userBlocks", { eq: { blockerId: rightId, blockedId: leftId } }),
+  ]);
+  return Boolean(left || right);
 }
 
 export async function writeAudit(repo: Repository, userId: string | null, action: string, coupleId: string | null = null) {

@@ -9,19 +9,28 @@ import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
 import { genderLabel } from "@/lib/gender";
 import { siteOrigin } from "@/lib/site-origin";
+import type { Repository } from "@/lib/data/repository";
 import { activeMembership, otherPartner } from "@/lib/services/access";
 
 export const metadata = { title: "Settings" };
+
+async function loadPartnerProfile(repo: Repository, coupleId: string | undefined, userId: string) {
+  if (!coupleId) return null;
+  const partner = await otherPartner(repo, coupleId, userId);
+  if (!partner) return null;
+  return repo.find("profiles", { eq: { id: partner.userId } });
+}
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   const { saved, error } = await searchParams;
   const user = await requireUser();
   const repo = await getRepository();
   const membership = await activeMembership(repo, user.profile.id);
-  const partner = membership ? await otherPartner(repo, membership.coupleId, user.profile.id) : null;
-  const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
-  const invites = membership ? await repo.list("coupleInvitations", { eq: { coupleId: membership.coupleId, status: "pending" } }) : [];
-  const requests = await repo.list("reconnectRequests", { eq: { partnerId: user.profile.id, status: "pending" } });
+  const [partnerProfile, invites, requests] = await Promise.all([
+    loadPartnerProfile(repo, membership?.coupleId, user.profile.id),
+    membership ? repo.list("coupleInvitations", { eq: { coupleId: membership.coupleId, status: "pending" } }) : Promise.resolve([]),
+    repo.list("reconnectRequests", { eq: { partnerId: user.profile.id, status: "pending" } }),
+  ]);
   const origin = await siteOrigin();
   return (
     <main className="grid w-full gap-6 px-4 py-6 lg:px-8 lg:py-8">

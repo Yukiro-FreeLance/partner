@@ -349,21 +349,26 @@ export async function loadSharedCycle(repo: Repository, viewerId: string, now = 
   const membership = await activeMembership(repo, viewerId);
   if (!membership) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
   const partner = await otherPartner(repo, membership.coupleId, viewerId);
-  if (!partner || await isBlocked(repo, viewerId, partner.userId)) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
-  const partnerProfile = await repo.find("profiles", { eq: { id: partner.userId } });
+  if (!partner) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
+  const [blocked, partnerProfile, stored] = await Promise.all([
+    isBlocked(repo, viewerId, partner.userId),
+    repo.find("profiles", { eq: { id: partner.userId } }),
+    storedProfile(repo, partner.userId),
+  ]);
+  if (blocked) return { partnerName: null as string | null, availability: "no_partner" as const, today: null as string | null, view: emptyPartnerView() };
   const partnerName = partnerProfile?.displayName ?? "Your partner";
-  const stored = await storedProfile(repo, partner.userId);
   if (!tracksOwnCycle(partnerProfile?.gender) || !stored) {
     return { partnerName, availability: "not_tracking" as const, today: null as string | null, view: emptyPartnerView() };
   }
-  const grants = (await repo.list("cycleShareGrants", { eq: { ownerId: partner.userId, partnerId: viewerId, coupleId: membership.coupleId } })).filter((grant) => !grant.revokedAt);
   const ownerProfile = stored;
   const today = calendarDay(ownerProfile.timeZone, now);
-  const [periods, checkIns, events] = await Promise.all([
+  const [grantRows, periods, checkIns, events] = await Promise.all([
+    repo.list("cycleShareGrants", { eq: { ownerId: partner.userId, partnerId: viewerId, coupleId: membership.coupleId } }),
     repo.list("cyclePeriods", { eq: { userId: partner.userId } }),
     repo.list("cycleCheckIns", { eq: { userId: partner.userId } }),
     repo.list("cycleEvents", { eq: { userId: partner.userId } }),
   ]);
+  const grants = grantRows.filter((grant) => !grant.revokedAt);
   const estimate = predictLocal({
     today,
     timeZone: ownerProfile.timeZone,

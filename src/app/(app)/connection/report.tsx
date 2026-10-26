@@ -17,8 +17,11 @@ const links = [
 export async function ConnectionReport({ focus }: { focus: "overview" | "knowledge" | "shared" | "differences" | "personality" | "history" }) {
   const user = await requireUser();
   const repo = await getRepository();
-  const report = await getConnectionReport(repo, user.profile.id);
-  const snapshots = (await repo.list("scoreSnapshots", { eq: { userId: user.profile.id } })).filter((item) => item.score !== null);
+  const [report, snapshotRows] = await Promise.all([
+    getConnectionReport(repo, user.profile.id),
+    repo.list("scoreSnapshots", { eq: { userId: user.profile.id } }),
+  ]);
+  const snapshots = snapshotRows.filter((item) => item.score !== null);
   const trend = snapshots.slice(-8).map((item, index) => ({ label: `Quiz ${index + 1}`, score: Math.round(item.score ?? 0) }));
   const groups: Record<typeof focus, string[]> = {
     overview: ["common", "different", "surprise", "ask", "learned", "interest"],

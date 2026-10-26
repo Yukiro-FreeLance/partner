@@ -1,11 +1,13 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify, SignJWT } from "jose";
 import { accountStatusOf } from "@/lib/auth/account-status";
+import { rememberMembership } from "@/lib/auth/request-scope";
 import { isAdminEmail, isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
 import { getRepository } from "@/lib/data";
-import type { Profile, UserPreferences } from "@/lib/domain";
+import type { CoupleMember, Profile, UserPreferences } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
 
 export const SESSION_COOKIE = "cs_session";
@@ -215,26 +217,49 @@ async function restoreSessionProfile(repo: Awaited<ReturnType<typeof getReposito
   return profile;
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export type AppSession = { user: CurrentUser; membership: CoupleMember | null; unread: number };
+
+async function shellFor(repo: Awaited<ReturnType<typeof getRepository>>, userId: string) {
+  const [membership, unread] = await Promise.all([
+    repo.find("coupleMembers", { eq: { userId, status: "active" } }),
+    repo.count("notifications", { eq: { userId, readAt: null } }),
+  ]);
+  return { membership, unread };
+}
+
+export const loadAppSession = cache(async function loadAppSession(): Promise<AppSession | null> {
   const session = await readSession();
   if (session) {
     const repo = await getRepository();
-    let profile = await repo.find("profiles", { eq: { id: session.userId } });
+    const [byId, storedPreferences, actorShell] = await Promise.all([
+      repo.find("profiles", { eq: { id: session.userId } }),
+      repo.find("userPreferences", { eq: { userId: session.userId } }),
+      shellFor(repo, session.userId),
+    ]);
+    let profile = byId;
     if (!profile && session.email) profile = await repo.find("profiles", { eq: { email: session.email } });
     if (!profile && session.email) profile = await restoreSessionProfile(repo, session.userId, session.email);
     if (!profile || accountStatusOf(profile) !== "active") return null;
     const synced = await syncAdmin(profile);
     const target = await impersonatedUser(synced);
     const effective = target ?? synced;
-    const preferences = await preferencesFor(repo, effective.id);
-    return { profile: effective, preferences, actor: target ? synced : null };
+    const samePerson = effective.id === session.userId;
+    const preferences = samePerson && storedPreferences ? storedPreferences : await preferencesFor(repo, effective.id);
+    const shell = samePerson ? actorShell : await shellFor(repo, effective.id);
+    rememberMembership(effective.id, shell.membership);
+    return { user: { profile: effective, preferences, actor: target ? synced : null }, membership: shell.membership, unread: shell.unread };
   }
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     if (!data.user) return null;
     const repo = await getRepository();
-    let profile = await repo.find("profiles", { eq: { id: data.user.id } });
+    const [found, storedPreferences, actorShell] = await Promise.all([
+      repo.find("profiles", { eq: { id: data.user.id } }),
+      repo.find("userPreferences", { eq: { userId: data.user.id } }),
+      shellFor(repo, data.user.id),
+    ]);
+    let profile = found;
     if (!profile) {
       const stamp = new Date().toISOString();
       profile = await repo.insert("profiles", {
@@ -259,11 +284,18 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     profile = await syncAdmin(profile);
     const target = await impersonatedUser(profile);
     const effective = target ?? profile;
-    const preferences = await preferencesFor(repo, effective.id);
-    return { profile: effective, preferences, actor: target ? profile : null };
+    const samePerson = effective.id === data.user.id;
+    const preferences = samePerson && storedPreferences ? storedPreferences : await preferencesFor(repo, effective.id);
+    const shell = samePerson ? actorShell : await shellFor(repo, effective.id);
+    rememberMembership(effective.id, shell.membership);
+    return { user: { profile: effective, preferences, actor: target ? profile : null }, membership: shell.membership, unread: shell.unread };
   }
   return null;
-}
+});
+
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<CurrentUser | null> {
+  return (await loadAppSession())?.user ?? null;
+});
 
 async function preferencesFor(repo: Awaited<ReturnType<typeof getRepository>>, userId: string) {
   const existing = await repo.find("userPreferences", { eq: { userId } });

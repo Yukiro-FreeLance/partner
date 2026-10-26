@@ -8,8 +8,11 @@ export const metadata = { title: "Personality" };
 
 export default async function PersonalityPage() {
   const user = await requireUser();
-  const tests = await (await getRepository()).list("personalityTests", { eq: { isActive: true } });
-  const results = await (await getRepository()).list("personalityResults", { eq: { userId: user.profile.id } });
+  const repo = await getRepository();
+  const [tests, results] = await Promise.all([
+    repo.list("personalityTests", { eq: { isActive: true } }),
+    repo.list("personalityResults", { eq: { userId: user.profile.id } }),
+  ]);
   return (
     <main className="grid w-full gap-4 px-4 py-5 lg:px-8">
       <h1 className="text-center font-serif text-3xl lg:text-left lg:text-4xl">Personality Lab</h1>

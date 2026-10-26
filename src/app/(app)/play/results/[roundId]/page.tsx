@@ -17,8 +17,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
   const results = await getRoundResults(repo, user.profile.id, roundId);
   if (!results.ok) return <main className="mx-auto max-w-3xl p-6"><h1 className="font-serif text-4xl">{results.error}</h1><Link href="/play" className="mt-4 inline-flex min-h-11 items-center text-sm underline">Back to Play</Link></main>;
   const { round, session, summary, questions, partnerName } = results.data;
-  const categories = await repo.list("questionCategories", {});
-  const partner = await otherPartner(repo, round.coupleId, user.profile.id);
+  const [categories, partner, snapshotRows, achievements, catalog] = await Promise.all([
+    repo.list("questionCategories", {}),
+    otherPartner(repo, round.coupleId, user.profile.id),
+    repo.list("scoreSnapshots", { eq: { userId: user.profile.id } }),
+    repo.list("userAchievements", { eq: { userId: user.profile.id } }),
+    repo.list("achievements", {}),
+  ]);
   const partnerKnowledge = summarize(questions.flatMap((item) => {
     if (!item.mine || !item.partnerPrediction || item.mine.skipped || item.partnerPrediction.skipped) return [];
     return [compareResponses(item.question, { payload: item.mine.payload, skipped: false }, { payload: item.partnerPrediction.payload, skipped: false })];
@@ -40,10 +45,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
     byCategory.set(name, current);
   }
   const chart = [...byCategory.entries()].map(([name, value]) => ({ name, score: Math.round((value.points / value.count) * 100) }));
-  const snapshots = (await repo.list("scoreSnapshots", { eq: { userId: user.profile.id } })).filter((item) => item.roundId !== round.id && item.score != null);
+  const snapshots = snapshotRows.filter((item) => item.roundId !== round.id && item.score != null);
   const previous = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + (item.score ?? 0), 0) / snapshots.length) : null;
-  const achievements = await repo.list("userAchievements", { eq: { userId: user.profile.id } });
-  const catalog = await repo.list("achievements", {});
   const seconds = session?.completedAt ? Math.max(0, Math.round((Date.parse(session.completedAt) - Date.parse(session.startedAt)) / 1000)) : null;
   const share = [
     round.title,

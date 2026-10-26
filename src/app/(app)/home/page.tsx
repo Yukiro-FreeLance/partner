@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth/session";
 import { PHASE_COPY } from "@/lib/cycle/copy";
 import { isMissingCycleTable } from "@/lib/cycle/errors";
 import { getRepository } from "@/lib/data";
+import type { Repository } from "@/lib/data/repository";
 import { tracksOwnCycle } from "@/lib/gender";
 import { loadOwnerCycle, loadSharedCycle } from "@/lib/services/cycle";
 import { activeMembership, otherPartner } from "@/lib/services/access";
@@ -23,6 +24,23 @@ const snapshotOrder = [
   ["decisions", "Decision making"],
   ["communication", "Communication"],
 ] as const;
+
+async function loadPartner(repo: Repository, coupleId: string | undefined, userId: string) {
+  if (!coupleId) return null;
+  const member = await otherPartner(repo, coupleId, userId);
+  if (!member) return null;
+  return repo.find("profiles", { eq: { id: member.userId } });
+}
+
+async function loadTodayQuestion(repo: Repository, coupleId: string | undefined) {
+  if (!coupleId) return null;
+  const rounds = await repo.list("quizRounds", { eq: { coupleId, mode: "daily" } }, { orderBy: "createdAt", descending: true, limit: 5 });
+  const todayRound = rounds.find((round) => dayKey(new Date(round.createdAt)) === dayKey(new Date()));
+  if (!todayRound) return null;
+  const link = (await repo.list("quizRoundQuestions", { eq: { roundId: todayRound.id } }, { limit: 1 }))[0];
+  if (!link) return null;
+  return repo.find("questions", { eq: { id: link.questionId } });
+}
 
 function greeting(date = new Date()) {
   const hour = date.getHours();
@@ -49,41 +67,39 @@ export default async function HomePage() {
   const user = await requireUser();
   const repo = await getRepository();
   const membership = await activeMembership(repo, user.profile.id);
-  const couple = membership ? await repo.find("couples", { eq: { id: membership.coupleId } }) : null;
-  const partnerMember = membership ? await otherPartner(repo, membership.coupleId, user.profile.id) : null;
-  const partner = partnerMember ? await repo.find("profiles", { eq: { id: partnerMember.userId } }) : null;
-  const [report, sessions, memories, invites, notes, challenges, personality] = await Promise.all([
+  const coupleId = membership?.coupleId;
+  const tracks = tracksOwnCycle(user.profile.gender);
+  const [couple, partner, report, sessions, memories, invites, notes, challenges, personality, shared, ownCycle, todayQuestion] = await Promise.all([
+    coupleId ? repo.find("couples", { eq: { id: coupleId } }) : Promise.resolve(null),
+    loadPartner(repo, coupleId, user.profile.id),
     membership ? getConnectionReport(repo, user.profile.id) : Promise.resolve(null),
     listMySessions(repo, user.profile.id),
-    membership ? repo.list("coupleMemories", { eq: { coupleId: membership.coupleId } }) : Promise.resolve([]),
-    membership ? repo.list("coupleInvitations", { eq: { coupleId: membership.coupleId, status: "pending" } }) : Promise.resolve([]),
-    repo.list("notifications", { eq: { userId: user.profile.id } }),
+    coupleId ? repo.list("coupleMemories", { eq: { coupleId } }) : Promise.resolve([]),
+    coupleId ? repo.list("coupleInvitations", { eq: { coupleId, status: "pending" } }) : Promise.resolve([]),
+    repo.list("notifications", { eq: { userId: user.profile.id } }, { orderBy: "createdAt", descending: true, limit: 5 }),
     repo.list("coupleChallenges", { eq: { isActive: true } }),
-    repo.list("personalityResults", { eq: { userId: user.profile.id } }),
+    repo.list("personalityResults", { eq: { userId: user.profile.id } }, { orderBy: "createdAt", descending: true, limit: 1 }),
+    loadSharedCycle(repo, user.profile.id).catch((error: unknown) => {
+      if (isMissingCycleTable(error)) return null;
+      throw error;
+    }),
+    tracks
+      ? loadOwnerCycle(repo, user.profile.id).catch((error: unknown) => {
+          if (isMissingCycleTable(error)) return null;
+          throw error;
+        })
+      : Promise.resolve(null),
+    loadTodayQuestion(repo, coupleId),
   ]);
   const resume = sessions.find((item) => item.session.status === "in_progress");
   const latestReview = sessions.find((item) => item.session.status === "completed");
-  const recentNotes = [...notes].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  const recentNotes = notes;
   const weeklyChallenges = challenges.filter((item) => item.cadence === "weekly").slice(0, 2);
-  const personalitySnapshot = [...personality].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const personalitySnapshot = personality[0] ?? null;
   const started = couple?.relationshipStartedOn ?? user.profile.relationshipStartedOn;
   const daysTogether = started ? Math.max(differenceInCalendarDays(new Date(), parseISO(started)), 0) : null;
-  const todayRound = membership ? (await repo.list("quizRounds", { eq: { coupleId: membership.coupleId, mode: "daily" } })).find((round) => dayKey(new Date(round.createdAt)) === dayKey(new Date())) : null;
-  const todayLink = todayRound ? (await repo.list("quizRoundQuestions", { eq: { roundId: todayRound.id } }))[0] : null;
-  const todayQuestion = todayLink ? await repo.find("questions", { eq: { id: todayLink.questionId } }) : null;
   const score = report?.knowledge.score ?? null;
-  const tracks = tracksOwnCycle(user.profile.gender);
-  let shared: Awaited<ReturnType<typeof loadSharedCycle>> | null = null;
-  let ownPhase: string | null = null;
-  try {
-    shared = await loadSharedCycle(repo, user.profile.id);
-    if (tracks) {
-      const own = await loadOwnerCycle(repo, user.profile.id);
-      ownPhase = own.estimate.hasHistory && own.estimate.phase !== "unknown" ? PHASE_COPY[own.estimate.phase].title : null;
-    }
-  } catch (error) {
-    if (!isMissingCycleTable(error)) throw error;
-  }
+  const ownPhase = ownCycle?.estimate.hasHistory && ownCycle.estimate.phase !== "unknown" ? PHASE_COPY[ownCycle.estimate.phase].title : null;
   const cycleFeature = tracks
     ? { href: "/cycle", title: "Cycle Tracker", detail: "Follow your cycle and share only what you choose.", action: "Open tracker", icon: CalendarHeart, tone: "bg-[#fde7f3]" }
     : { href: "/cycle", title: "Partner cycle", detail: "See the cycle details your partner chooses to share.", action: "View shared cycle", icon: CalendarHeart, tone: "bg-[#fde7f3]" };

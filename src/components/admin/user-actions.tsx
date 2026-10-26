@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 
 type AccountStatus = "active" | "archived" | "deleted";
 
-export function UserActions({ userId, name, role, isDemo, status }: { userId: string; name: string; role: "user" | "admin"; isDemo: boolean; status: AccountStatus }) {
+export function UserActions({ userId, name, role, isDemo, status }: { userId: string; name: string; role: "user" | "admin" | "super_admin"; isDemo: boolean; status: AccountStatus }) {
   const [roleOpen, setRoleOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "archive" | "delete" | "purge">(null);
   return (
@@ -20,29 +20,30 @@ export function UserActions({ userId, name, role, isDemo, status }: { userId: st
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {status === "active" && (
+          {status === "active" && role !== "super_admin" && (
             <form method="post" action="/api/admin/impersonate">
               <input type="hidden" name="userId" value={userId} />
               <DropdownMenuItem asChild><button type="submit" className="w-full text-left">Impersonate</button></DropdownMenuItem>
             </form>
           )}
           {!isDemo && status !== "deleted" && <DropdownMenuItem onSelect={() => setRoleOpen(true)}>Change role</DropdownMenuItem>}
-          {status === "active" && <DropdownMenuItem onSelect={() => setConfirm("archive")}>Archive</DropdownMenuItem>}
+          {status === "active" && role !== "super_admin" && <DropdownMenuItem onSelect={() => setConfirm("archive")}>Archive</DropdownMenuItem>}
           {status !== "active" && <DropdownMenuItem onSelect={() => setConfirm("archive")}>Restore</DropdownMenuItem>}
-          {status !== "deleted" && <DropdownMenuItem onSelect={() => setConfirm("delete")}>Delete</DropdownMenuItem>}
-          {!isDemo && <DropdownMenuItem className="text-destructive" onSelect={() => setConfirm("purge")}>Delete permanently</DropdownMenuItem>}
+          {status !== "deleted" && role !== "super_admin" && <DropdownMenuItem onSelect={() => setConfirm("delete")}>Delete</DropdownMenuItem>}
+          {!isDemo && role !== "super_admin" && <DropdownMenuItem className="text-destructive" onSelect={() => setConfirm("purge")}>Delete permanently</DropdownMenuItem>}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog open={roleOpen} onOpenChange={setRoleOpen}>
         <DialogContent>
           <DialogTitle>Change role</DialogTitle>
-          <DialogDescription>{name} can be a member or an admin. Super admin stays with the platform owner.</DialogDescription>
+          <DialogDescription>{name} can be a member, an admin, or a super admin.</DialogDescription>
           <form action={setMemberRoleAction} className="mt-4 grid gap-3">
             <input type="hidden" name="userId" value={userId} />
             <label className="grid gap-1 text-sm">Role
               <select name="role" defaultValue={role} className="h-11 rounded-2xl border bg-white px-3 text-sm">
                 <option value="user">Member</option>
                 <option value="admin">Admin</option>
+                <option value="super_admin">Super admin</option>
               </select>
             </label>
             <Button type="submit">Save role</Button>

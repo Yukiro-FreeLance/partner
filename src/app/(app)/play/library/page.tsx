@@ -12,14 +12,17 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const user = await requireUser();
   const repo = await getRepository();
   const membership = await activeMembership(repo, user.profile.id);
-  const cards = (await repo.list("conversationCards", { eq: { isActive: true } })).filter((card) => {
+  const [cardRows, activity, saved] = await Promise.all([
+    repo.list("conversationCards", { eq: { isActive: true } }),
+    repo.list("cardActivity", { eq: { userId: user.profile.id } }),
+    repo.list("savedQuestions", { eq: { userId: user.profile.id } }),
+  ]);
+  const cards = cardRows.filter((card) => {
     if (card.coupleId && card.coupleId !== membership?.coupleId) return false;
     if (depth !== "all" && card.depth !== depth) return false;
     if (q && !card.prompt.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   });
-  const activity = await repo.list("cardActivity", { eq: { userId: user.profile.id } });
-  const saved = await repo.list("savedQuestions", { eq: { userId: user.profile.id } });
   const recent = new Set(user.preferences.recentCardIds);
   const visible = cards.filter((card) => !activity.find((item) => item.cardId === card.id && item.hidden) && !recent.has(card.id));
   const featured = visible[Math.floor(Math.random() * Math.max(visible.length, 1))] ?? cards[0];

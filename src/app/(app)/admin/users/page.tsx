@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CreateUserDialog } from "@/components/admin/create-user-dialog";
 import { UserActions } from "@/components/admin/user-actions";
 import { accountStatusOf } from "@/lib/auth/account-status";
+import { isSuperAdminEmail } from "@/lib/config";
 import { getRepository } from "@/lib/data";
 import { requireUser } from "@/lib/auth/session";
 
@@ -55,7 +56,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             {visible.map((person) => {
               const roleLabel = person.role === "super_admin" ? "Super admin" : person.role === "admin" ? "Admin" : "Member";
               const status = accountStatusOf(person);
-              const manageable = person.id !== actor.id && person.role !== "super_admin";
+              const manageable = person.id !== actor.id && !isSuperAdminEmail(person.email);
               return (
                 <tr key={person.id} className="border-b border-[#f8f1fa] last:border-b-0">
                   <td className="px-4 py-3 font-medium">{person.displayName}</td>
@@ -66,7 +67,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     {status !== "active" && <span className="ml-2 rounded-full bg-[#f5f3ff] px-2 py-1 text-xs font-medium text-[#6d28d9] capitalize">{status}</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {manageable ? <UserActions userId={person.id} name={person.displayName} role={person.role === "admin" ? "admin" : "user"} isDemo={person.isDemo} status={status} /> : <span className="text-muted-foreground">—</span>}
+                    {manageable ? <UserActions userId={person.id} name={person.displayName} role={person.role} isDemo={person.isDemo} status={status} /> : <span className="text-muted-foreground">—</span>}
                   </td>
                 </tr>
               );

@@ -163,6 +163,10 @@ function sharedRepository(): Repository {
       const memory = await blobMemory();
       return memory.list(table, where, options);
     },
+    async count(table, where) {
+      const memory = await blobMemory();
+      return memory.count(table, where);
+    },
     async find(table, where) {
       const memory = await blobMemory();
       return memory.find(table, where);
@@ -205,6 +209,7 @@ function trackWrites(memory: Repository) {
   const repo: Repository = {
     kind: memory.kind,
     list: (table, where, options) => memory.list(table, where, options),
+    count: (table, where) => memory.count(table, where),
     find: (table, where) => memory.find(table, where),
     async insert(table, row) {
       state.dirty = true;
@@ -265,6 +270,7 @@ function wrap(memory: ReturnType<typeof createMemoryRepository>): Repository {
   return {
     kind: "memory",
     list: (table, where, options) => memory.list(table, where, options),
+    count: (table, where) => memory.count(table, where),
     find: (table, where) => memory.find(table, where),
     async insert(table, row) {
       const saved = await locked(async () => {

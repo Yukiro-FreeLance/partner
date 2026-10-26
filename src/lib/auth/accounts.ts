@@ -16,7 +16,7 @@ function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function provisionAccount(repo: Repository, input: { email: string; password: string; displayName: string; role: "user" | "admin" }) {
+export async function provisionAccount(repo: Repository, input: { email: string; password: string; displayName: string; role: "user" | "admin" | "super_admin" }) {
   const email = input.email.trim().toLowerCase();
   if (email.endsWith("@demo.couplesync.local")) return fail("Demo addresses stay fictional members. Use a real email.");
   if (await repo.find("profiles", { eq: { email } })) return fail("An account with that email already exists.");
