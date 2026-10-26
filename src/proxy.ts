@@ -4,15 +4,24 @@ import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
 
 const protectedPrefixes = ["/home", "/play", "/personality", "/connection", "/memories", "/cycle", "/profile", "/settings", "/notifications", "/onboarding", "/admin"];
 
+function downloadPath(pathname: string) {
+  if (pathname === "/downloads/couplesync.apk") return { pathname: "/api/download/apk", search: "" };
+  if (pathname === "/downloads/couplesync-setup.exe") return { pathname: "/api/download/desktop/windows", search: "" };
+  if (pathname === "/downloads/couplesync.dmg") return { pathname: "/api/download/desktop/mac", search: "" };
+  return null;
+}
+
 function isProtected(pathname: string) {
   return protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/downloads/couplesync.apk") {
+  const downloadRewrite = downloadPath(pathname);
+  if (downloadRewrite) {
     const url = request.nextUrl.clone();
-    url.pathname = "/api/download/apk";
+    url.pathname = downloadRewrite.pathname;
+    url.search = downloadRewrite.search;
     return NextResponse.rewrite(url);
   }
   let response = NextResponse.next({ request });

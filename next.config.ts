@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/favicon.ico", destination: "/site-asset/favicon" },
       { source: "/downloads/couplesync.apk", destination: "/api/download/apk" },
+      { source: "/downloads/couplesync-setup.exe", destination: "/api/download/desktop/windows" },
+      { source: "/downloads/couplesync.dmg", destination: "/api/download/desktop/mac" },
     ];
   },
   async headers() {
