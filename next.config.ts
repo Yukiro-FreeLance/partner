@@ -9,7 +9,10 @@ const nextConfig: NextConfig = {
     },
   },
   async rewrites() {
-    return [{ source: "/favicon.ico", destination: "/site-asset/favicon" }];
+    return [
+      { source: "/favicon.ico", destination: "/site-asset/favicon" },
+      { source: "/downloads/couplesync.apk", destination: "/api/download/apk" },
+    ];
   },
   async headers() {
     return [

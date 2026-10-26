@@ -34,7 +34,7 @@ export function AppShare({ tone = "light", layout = "row" }: { tone?: "light" | 
 
   return (
     <div className={layout === "stack" ? "grid gap-2" : "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"}>
-      <a href={apkHref} download="CoupleSync.apk" className={buttonClass}>
+      <a href={apkHref} className={buttonClass}>
         <Download className="size-4" aria-hidden />
         Download APK
       </a>

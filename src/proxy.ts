@@ -10,6 +10,11 @@ function isProtected(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (pathname === "/downloads/couplesync.apk") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/api/download/apk";
+    return NextResponse.rewrite(url);
+  }
   let response = NextResponse.next({ request });
   let supabaseUser = false;
   if (supabaseUrl() && supabaseAnonKey()) {
