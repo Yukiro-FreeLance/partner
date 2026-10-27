@@ -658,6 +658,132 @@ export type MediaObject = {
   createdAt: string;
 };
 
+export type DatePlanEventType = "concert" | "travel" | "anniversary" | "date_night" | "vacation" | "other";
+
+export type DatePlanStatus = "planning" | "ready" | "ongoing" | "completed";
+
+export type SplitMethod = "fifty_fifty" | "custom_percent" | "equal_fixed" | "individual";
+
+export type ExpenseSplitMethod = SplitMethod | "inherit";
+
+export type ExpenseCategory = "flight" | "accommodation" | "food" | "transportation" | "activities" | "merchandise" | "shopping" | "other";
+
+export type ExpenseStatus = "planned" | "paid" | "partial" | "cancelled";
+
+export type ActivityStatus = "planned" | "done" | "skipped";
+
+export type PaymentMethod = "cash" | "card" | "transfer" | "ewallet" | "other";
+
+export type DatePlan = {
+  id: string;
+  coupleId: string;
+  title: string;
+  description: string | null;
+  destination: string | null;
+  startDate: string;
+  endDate: string;
+  eventType: DatePlanEventType;
+  coverImage: string | null;
+  estimatedBudget: number;
+  currency: string;
+  status: DatePlanStatus;
+  splitMethod: SplitMethod;
+  customSplitPercent: number;
+  fixedContribution: number;
+  warningThreshold: number;
+  dailyLimit: number | null;
+  createdBy: string;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryDay = {
+  id: string;
+  datePlanId: string;
+  date: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryActivity = {
+  id: string;
+  itineraryDayId: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  mapUrl: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  estimatedCost: number;
+  actualCost: number;
+  status: ActivityStatus;
+  sortOrder: number;
+  notes: string | null;
+  reservation: string | null;
+  photoPath: string | null;
+  createdBy: string;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryExpense = {
+  id: string;
+  datePlanId: string;
+  itineraryDayId: string | null;
+  itineraryActivityId: string | null;
+  expenseName: string;
+  category: ExpenseCategory;
+  estimatedAmount: number;
+  actualAmount: number;
+  paidBy: string;
+  splitMethod: ExpenseSplitMethod;
+  customSplitPercent: number | null;
+  paymentMethod: PaymentMethod | null;
+  expenseDate: string;
+  receiptPath: string | null;
+  notes: string | null;
+  status: ExpenseStatus;
+  createdBy: string;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryChecklist = {
+  id: string;
+  itineraryActivityId: string;
+  title: string;
+  isCompleted: boolean;
+  completedBy: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryComment = {
+  id: string;
+  datePlanId: string;
+  itineraryActivityId: string | null;
+  authorId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ItineraryHistory = {
+  id: string;
+  datePlanId: string;
+  actorId: string;
+  action: string;
+  summary: string;
+  createdAt: string;
+};
+
 export type Database = {
   profiles: Profile[];
   credentials: Credential[];
@@ -709,6 +835,13 @@ export type Database = {
   cycleReminders: CycleReminder[];
   cycleEvents: CycleEvent[];
   cycleShareGrants: CycleShareGrant[];
+  datePlans: DatePlan[];
+  itineraryDays: ItineraryDay[];
+  itineraryActivities: ItineraryActivity[];
+  itineraryExpenses: ItineraryExpense[];
+  itineraryChecklists: ItineraryChecklist[];
+  itineraryComments: ItineraryComment[];
+  itineraryHistory: ItineraryHistory[];
 };
 
 export type TableName = keyof Database;

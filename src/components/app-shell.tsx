@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, UserRound } from "lucide-react";
+import { Bell, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, Ticket, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { DashboardSearch } from "@/components/dashboard-search";
 import { Avatar } from "@/components/ui/feedback";
@@ -93,6 +93,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
             <ShellLink href="/personality" active={pathname.startsWith("/personality")} icon={Brain}>Personality Lab</ShellLink>
             <ShellLink href="/connection" active={pathname.startsWith("/connection")} icon={Heart}>Our Connection</ShellLink>
             <ShellLink href="/memories" active={pathname.startsWith("/memories")} icon={ImageIcon}>Memories</ShellLink>
+            <ShellLink href="/plans" active={pathname.startsWith("/plans")} icon={Ticket}>Date plans</ShellLink>
             <ShellLink href="/cycle" active={pathname.startsWith("/cycle")} icon={CalendarHeart}>{tracksCycle ? "Cycle" : "Partner cycle"}</ShellLink>
             <ShellLink href="/profile" active={pathname.startsWith("/profile")} icon={UserRound}>{copy.profile}</ShellLink>
             {superAdmin && <ShellLink href="/admin/users" active={pathname.startsWith("/admin/users")} icon={Shield}>User list</ShellLink>}
@@ -121,6 +122,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
           <header className="sticky top-0 z-30 flex items-center justify-between bg-[#fbf7fc]/95 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 backdrop-blur lg:hidden">
             <Logo />
             <div className="flex items-center gap-1">
+              <Link href="/plans" className="flex size-11 items-center justify-center" aria-label="Date plans"><Ticket className="size-5" aria-hidden /></Link>
               <Link href="/cycle" className="flex size-11 items-center justify-center" aria-label={tracksCycle ? "Cycle tracker" : "Partner cycle"}><CalendarHeart className="size-5" aria-hidden /></Link>
               <Link href="/notifications" className="relative flex size-11 items-center justify-center" aria-label={count ? `Notifications, ${count} unread` : "Notifications"}>
                 <Bell className="size-5" aria-hidden />

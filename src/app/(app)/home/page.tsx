@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from "date-fns";
-import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play, type LucideIcon } from "lucide-react";
+import { Brain, CalendarHeart, Gamepad2, Heart, ImageIcon, Play, Ticket, type LucideIcon } from "lucide-react";
 import { resetDemoAction } from "@/app/actions";
 import { BannerUpload } from "@/components/banner-upload";
 import { PartnerCycleCard } from "@/components/cycle/partner-panel";
@@ -108,6 +108,7 @@ export default async function HomePage() {
     { href: "/personality", title: "Personality Lab", detail: "Explore personalities, communication styles, and love languages.", action: "Take Test", icon: Brain, tone: "bg-[#eee9ff]" },
     { href: "/connection", title: "Our Connection", detail: "Compare your answers, find shared interests, and discover new things.", action: "View Insights", icon: Heart, tone: "bg-[#ffe8f1]" },
     { href: "/memories", title: "Our Story", detail: "Save milestones, memories, and your future dreams together.", action: "Open Timeline", icon: ImageIcon, tone: "bg-[#e7f1ff]" },
+    { href: "/plans", title: "Date plans", detail: "Build a shared itinerary and keep the trip budget in one place.", action: "Open plans", icon: Ticket, tone: "bg-[#fff1e7]" },
     cycleFeature,
   ];
 
@@ -261,6 +262,7 @@ export default async function HomePage() {
                 ["/personality", "Take Personality Test"],
                 ["/play/daily", "Ask a Question"],
                 ["/memories/new", "Add a Memory"],
+                ["/plans", "Plan a date"],
               ].map(([href, label]) => (
                 <Link key={label} href={href} className="flex min-h-11 items-center rounded-full bg-secondary px-4 text-sm">{label}</Link>
               ))}

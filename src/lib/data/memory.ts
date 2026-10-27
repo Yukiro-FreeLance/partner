@@ -53,6 +53,13 @@ export function emptyDatabase(): Database {
     cycleReminders: [],
     cycleEvents: [],
     cycleShareGrants: [],
+    datePlans: [],
+    itineraryDays: [],
+    itineraryActivities: [],
+    itineraryExpenses: [],
+    itineraryChecklists: [],
+    itineraryComments: [],
+    itineraryHistory: [],
   };
 }
 

@@ -15,6 +15,7 @@ const destinations = [
   { href: "/personality", label: "Personality Lab" },
   { href: "/connection", label: "Our Connection" },
   { href: "/memories", label: "Memories" },
+  { href: "/plans", label: "Date plans" },
   { href: "/cycle", label: "Cycle tracker" },
   { href: "/profile", label: "Profile" },
   { href: "/settings", label: "Settings" },

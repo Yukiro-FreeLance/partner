@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
 
-const protectedPrefixes = ["/home", "/play", "/personality", "/connection", "/memories", "/cycle", "/profile", "/settings", "/notifications", "/onboarding", "/admin"];
+const protectedPrefixes = ["/home", "/play", "/personality", "/connection", "/memories", "/plans", "/cycle", "/profile", "/settings", "/notifications", "/onboarding", "/admin"];
 
 function downloadPath(pathname: string) {
   if (pathname === "/downloads/couplesync.apk") return { pathname: "/api/download/apk", search: "" };
