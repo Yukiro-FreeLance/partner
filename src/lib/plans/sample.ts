@@ -2,6 +2,11 @@ import type { ExpenseCategory } from "@/lib/domain";
 
 export const SAMPLE_PLAN_TITLE = "MCR Concert Trip — Manila";
 
+export function isSamplePlanTitle(title: string) {
+  const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[\u2010-\u2015\u2212-]/g, "-").replace(/\s+/g, " ").trim();
+  return normalize(title) === normalize(SAMPLE_PLAN_TITLE);
+}
+
 export type SampleActivity = {
   title: string;
   description: string;

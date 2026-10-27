@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
 import { isMissingPlanTable } from "@/lib/plans/errors";
-import { SAMPLE_PLAN_TITLE } from "@/lib/plans/sample";
+import { isSamplePlanTitle } from "@/lib/plans/sample";
 import { countdownLabel, eventTypeLabels, formatMoney, formatPlanRange, healthClass, healthLabel, planStatusLabels } from "@/lib/plans/labels";
 import { activeMembership } from "@/lib/services/access";
 import { listDatePlans } from "@/lib/services/plans";
@@ -29,7 +29,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   try {
     const listed = await listDatePlans(repo, user.profile.id);
     if (!listed.ok) throw new Error(listed.error);
-    const sampleUsed = listed.data.some(({ plan }) => plan.title === SAMPLE_PLAN_TITLE);
+    const sampleUsed = listed.data.some(({ plan }) => isSamplePlanTitle(plan.title));
     return (
       <main className="w-full px-4 py-5 lg:px-8">
         <PlanStatus saved={query.saved} error={query.error} />

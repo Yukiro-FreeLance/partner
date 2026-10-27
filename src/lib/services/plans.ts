@@ -12,7 +12,7 @@ import { createId } from "@/lib/ids";
 import { formatMoney } from "@/lib/plans/labels";
 import { roundMoney, summarizeTrip, type LedgerExpense, type TripSummary } from "@/lib/plans/money";
 import type { ActivityInput, DayInput, ExpenseInput, PlanInput } from "@/lib/plans/parse";
-import { sampleDays, samplePlan, SAMPLE_PLAN_TITLE } from "@/lib/plans/sample";
+import { isSamplePlanTitle, sampleDays, samplePlan, SAMPLE_PLAN_TITLE } from "@/lib/plans/sample";
 import { fail, ok, type Result } from "@/lib/result";
 import { activeMembership, notifyUser, otherPartner, writeAudit } from "@/lib/services/access";
 
@@ -135,7 +135,7 @@ export async function deleteDatePlan(repo: Repository, userId: string, planId: s
 export async function createSampleDatePlan(repo: Repository, userId: string) {
   const member = await activeMembership(repo, userId);
   if (!member) return fail("Create or join a couple space before planning a date.");
-  const existing = (await repo.list("datePlans", { eq: { coupleId: member.coupleId } })).find((plan) => plan.title === SAMPLE_PLAN_TITLE);
+  const existing = (await repo.list("datePlans", { eq: { coupleId: member.coupleId } })).find((plan) => isSamplePlanTitle(plan.title));
   if (existing) {
     const days = await repo.list("itineraryDays", { eq: { datePlanId: existing.id } });
     if (days.length >= sampleDays.length) return ok({ id: existing.id, created: false });
