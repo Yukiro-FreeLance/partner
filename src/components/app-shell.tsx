@@ -44,6 +44,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
       const body = (await response.json()) as { unread?: number };
       if (!cancelled && typeof body.unread === "number") setCount(body.unread);
     }
+    void poll();
     const timer = window.setInterval(() => void poll(), 30000);
     return () => {
       cancelled = true;

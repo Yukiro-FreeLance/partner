@@ -118,6 +118,31 @@ h1, h2, h3, h4, .font-serif {
 
 .page-load-bar { animation: page-load 1s ease-in-out infinite; }
 
+@media (max-width: 639px) {
+  #content .font-serif.text-5xl { font-size: 1.875rem; line-height: 1.1; }
+  #content .font-serif.text-4xl { font-size: 1.625rem; line-height: 1.15; }
+  #content .font-serif.text-3xl { font-size: 1.25rem; line-height: 1.2; }
+  #content .font-serif.text-2xl { font-size: 1.125rem; line-height: 1.25; }
+  #content .font-serif.text-xl { font-size: 1rem; line-height: 1.3; }
+  #content .text-sm { font-size: 0.8125rem; line-height: 1.35; }
+  #content .leading-6 { line-height: 1.35; }
+  #content .panel.p-5,
+  #content .panel.p-6 { padding: 0.875rem; }
+  #content > main.gap-4 { gap: 0.625rem; }
+  #content a.min-h-11,
+  #content button.min-h-11 { min-height: 2rem; }
+  #content button.h-11,
+  #content a.h-11,
+  #content input.h-11,
+  #content select.h-11 {
+    height: 2rem;
+    font-size: 0.8125rem;
+  }
+  #content button.h-11,
+  #content a.h-11 { padding-inline: 0.75rem; }
+  #content button.h-9 { height: 1.75rem; font-size: 0.6875rem; padding-inline: 0.625rem; }
+}
+
 .safe-pb { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 
 @media (min-width: 1024px) {

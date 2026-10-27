@@ -219,7 +219,7 @@ async function restoreSessionProfile(repo: Awaited<ReturnType<typeof getReposito
 
 export type AppSession = { user: CurrentUser; membership: CoupleMember | null; unread: number };
 
-const SESSION_FRESH_MS = 5000;
+const SESSION_FRESH_MS = 60_000;
 const sessionCache = globalThis as { __appSessions?: Map<string, { at: number; value: AppSession }> };
 
 function cachedSessions() {

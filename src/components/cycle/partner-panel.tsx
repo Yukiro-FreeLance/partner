@@ -36,7 +36,7 @@ export function PartnerCycleCard({ shared, heading = "Partner's cycle" }: { shar
           <p className="text-xs text-muted-foreground">Predictions are estimates, not confirmed medical information. Hidden records are not shown here.</p>
         </div>
       )}
-      <Link href="/cycle" className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary">Open cycle</Link>
+      <Link href="/cycle" className="mt-2 inline-flex min-h-8 items-center text-xs font-medium text-primary sm:mt-4 sm:min-h-11 sm:text-sm">Open cycle</Link>
     </section>
   );
 }

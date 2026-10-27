@@ -32,7 +32,7 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
     <main className="grid w-full gap-4 px-4 py-5 lg:px-8">
       <header>
         <h1 className="font-serif text-4xl">Play</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Choose a game to play together and strengthen your connection. Guesses and personal answers are saved separately.</p>
+        <p className="mt-1 text-xs leading-4 text-muted-foreground sm:mt-2 sm:text-sm sm:leading-5">Choose a game to play together and strengthen your connection. Guesses and personal answers are saved separately.</p>
         {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
       </header>
       <div className="flex flex-wrap gap-3 text-sm">
@@ -42,11 +42,11 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
       </div>
       <section className="grid gap-3 lg:grid-cols-2">
         {modes.map(([mode, title, size, description, category]) => (
-          <form id={title === "Quick quiz" ? "quick-quiz" : title === "Deep dive" ? "deep-dive" : undefined} key={title} action={startQuizAction} className="panel flex items-center gap-3 p-4 motion-safe:transition motion-safe:hover:-translate-y-0.5">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-secondary font-serif text-lg text-rose">{size}</span>
+          <form id={title === "Quick quiz" ? "quick-quiz" : title === "Deep dive" ? "deep-dive" : undefined} key={title} action={startQuizAction} className="panel flex items-center gap-2 p-3 motion-safe:transition motion-safe:hover:-translate-y-0.5 sm:gap-3 sm:p-4">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary font-serif text-sm text-rose sm:size-12 sm:rounded-2xl sm:text-lg">{size}</span>
             <div className="min-w-0 flex-1">
-              <h2 className="font-serif text-xl leading-tight">{title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              <h2 className="font-serif text-base leading-tight sm:text-xl">{title}</h2>
+              <p className="mt-0.5 text-xs leading-4 text-muted-foreground sm:text-sm sm:leading-5">{description}</p>
             </div>
             <input type="hidden" name="mode" value={mode} />
             <input type="hidden" name="size" value={size} />

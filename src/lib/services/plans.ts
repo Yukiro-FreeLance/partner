@@ -40,8 +40,14 @@ export async function listDatePlans(repo: Repository, userId: string): Promise<R
   const partners = await loadPartners(repo, member.coupleId);
   const plans = (await repo.list("datePlans", { eq: { coupleId: member.coupleId } })).map(asPlan).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const ids = plans.map((plan) => plan.id);
-  const expenses = ids.length ? (await repo.list("itineraryExpenses", { in: { datePlanId: ids } })).map(asExpense) : [];
-  const days = ids.length ? (await repo.list("itineraryDays", { in: { datePlanId: ids } })).map(asDay) : [];
+  const [expenseRows, dayRows] = ids.length
+    ? await Promise.all([
+      repo.list("itineraryExpenses", { in: { datePlanId: ids } }),
+      repo.list("itineraryDays", { in: { datePlanId: ids } }),
+    ])
+    : [[], []];
+  const expenses = expenseRows.map(asExpense);
+  const days = dayRows.map(asDay);
   return ok(plans.map((plan) => ({
     plan,
     summary: summaryFor(plan, partners.map((partner) => partner.userId), expenses.filter((expense) => expense.datePlanId === plan.id), days.filter((day) => day.datePlanId === plan.id)),
@@ -52,8 +58,8 @@ export async function loadDatePlan(repo: Repository, userId: string, planId: str
   const access = await owned(repo, userId, planId);
   if (!access.ok) return access;
   const plan = access.data;
-  const partners = await loadPartners(repo, plan.coupleId);
-  const [days, expenses, comments, history] = await Promise.all([
+  const [partners, days, expenses, comments, history] = await Promise.all([
+    loadPartners(repo, plan.coupleId),
     repo.list("itineraryDays", { eq: { datePlanId: plan.id } }),
     repo.list("itineraryExpenses", { eq: { datePlanId: plan.id } }),
     repo.list("itineraryComments", { eq: { datePlanId: plan.id } }),

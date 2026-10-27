@@ -148,11 +148,11 @@ export default async function HomePage() {
           </BannerUpload>
           <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {features.map((feature) => (
-              <Link key={feature.title} href={feature.href} className={`flex min-h-36 flex-col rounded-[1.75rem] p-4 ${feature.tone}`}>
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-white/80 text-primary"><feature.icon className="size-5" aria-hidden /></span>
-                <span className="mt-3 font-serif text-xl leading-tight">{feature.title}</span>
-                <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{feature.detail}</span>
-                <span className="mt-auto pt-3 text-sm font-medium text-primary">{feature.action} →</span>
+              <Link key={feature.title} href={feature.href} className={`flex min-h-28 flex-col rounded-2xl p-3 sm:min-h-36 sm:rounded-[1.75rem] sm:p-4 ${feature.tone}`}>
+                <span className="flex size-8 items-center justify-center rounded-xl bg-white/80 text-primary sm:size-11 sm:rounded-2xl"><feature.icon className="size-4 sm:size-5" aria-hidden /></span>
+                <span className="mt-2 font-serif text-base leading-tight sm:mt-3 sm:text-xl">{feature.title}</span>
+                <span className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground sm:mt-1 sm:text-xs sm:leading-5">{feature.detail}</span>
+                <span className="mt-auto pt-2 text-xs font-medium text-primary sm:pt-3 sm:text-sm">{feature.action} →</span>
               </Link>
             ))}
           </section>
@@ -245,8 +245,8 @@ export default async function HomePage() {
           {tracks && (
             <section className="panel p-5">
               <h2 className="font-serif text-2xl">Your cycle</h2>
-              <p className="mt-2 text-sm leading-6">{ownPhase ? `${ownPhase} phase estimate.` : "Log a period to start a personal estimate."} Predictions are estimates, not confirmed medical information.</p>
-              <Link href="/cycle" className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary">Open tracker</Link>
+              <p className="mt-1 text-xs leading-4 text-muted-foreground sm:mt-2 sm:text-sm sm:leading-6">{ownPhase ? `${ownPhase} phase estimate.` : "Log a period to start a personal estimate."} Predictions are estimates, not confirmed medical information.</p>
+              <Link href="/cycle" className="mt-2 inline-flex min-h-8 items-center text-xs font-medium text-primary sm:mt-3 sm:min-h-11 sm:text-sm">Open tracker</Link>
             </section>
           )}
           {shared && <PartnerCycleCard shared={shared} />}
