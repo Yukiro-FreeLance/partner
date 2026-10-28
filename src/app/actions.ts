@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { accountStatusOf } from "@/lib/auth/account-status";
 import { isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
 import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
@@ -603,11 +604,14 @@ export async function impersonateAction(formData: FormData) {
   const actor = user.actor ?? user.profile;
   if (actor.role !== "super_admin") redirect("/home");
   const targetId = formString(formData, "userId");
-  if (!targetId || targetId === actor.id) return;
+  if (!targetId || targetId === actor.id) redirect("/admin/users");
   const repo = await getRepository();
   const target = await repo.find("profiles", { eq: { id: targetId } });
-  if (!target || target.role === "super_admin") return;
+  if (!target || target.role === "super_admin" || accountStatusOf(target) !== "active") {
+    redirect(`/admin/users?error=${encodeURIComponent("That account cannot be opened.")}`);
+  }
   await writeAudit(repo, actor.id, `impersonate ${target.id}`);
+  forgetAppSession(actor.id);
   await setImpersonationCookie(target.id, actor.id);
   redirect("/home");
 }

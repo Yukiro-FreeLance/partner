@@ -1,18 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
-import { deleteMemberPermanentlyAction, setAccountStatusAction, setMemberRoleAction } from "@/app/actions";
+import { deleteMemberPermanentlyAction, impersonateAction, setAccountStatusAction, setMemberRoleAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, Dialog, DialogContent, DialogDescription, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/overlays";
 
 type AccountStatus = "active" | "archived" | "deleted";
 
 export function UserActions({ userId, name, role, isDemo, status }: { userId: string; name: string; role: "user" | "admin" | "super_admin"; isDemo: boolean; status: AccountStatus }) {
+  const impersonateForm = useRef<HTMLFormElement>(null);
   const [roleOpen, setRoleOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "archive" | "delete" | "purge">(null);
   return (
     <>
+      {status === "active" && role !== "super_admin" && (
+        <form ref={impersonateForm} action={impersonateAction} className="hidden">
+          <input type="hidden" name="userId" value={userId} />
+        </form>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="ghost" size="icon" aria-label={`Actions for ${name}`}>
@@ -21,10 +27,10 @@ export function UserActions({ userId, name, role, isDemo, status }: { userId: st
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {status === "active" && role !== "super_admin" && (
-            <form method="post" action="/api/admin/impersonate">
-              <input type="hidden" name="userId" value={userId} />
-              <DropdownMenuItem asChild><button type="submit" className="w-full text-left">Impersonate</button></DropdownMenuItem>
-            </form>
+            <DropdownMenuItem onSelect={(event) => {
+              event.preventDefault();
+              impersonateForm.current?.requestSubmit();
+            }}>Impersonate</DropdownMenuItem>
           )}
           {!isDemo && status !== "deleted" && <DropdownMenuItem onSelect={() => setRoleOpen(true)}>Change role</DropdownMenuItem>}
           {status === "active" && role !== "super_admin" && <DropdownMenuItem onSelect={() => setConfirm("archive")}>Archive</DropdownMenuItem>}
