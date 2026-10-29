@@ -15,7 +15,7 @@ import { createId } from "@/lib/ids";
 import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
 import { pauseCycleSharing } from "@/lib/services/cycle";
 import { acceptInvitation, createCouple, createInvitation, invitationKey, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
-import { completeQuiz, getOrCreateDaily, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
+import { completeQuiz, getOrCreateDaily, saveQuizBatch, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { activeMembership, couplePartners, writeAudit } from "@/lib/services/access";
 import { saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
@@ -366,16 +366,17 @@ export async function completeQuizAction(sessionId: string) {
   redirect(`/play/results/${result.data.roundId}`);
 }
 
-export async function finishQuizAction(input: { sessionId: string; questionId: string; currentIndex: number; selfAnswer?: { payload: AnswerPayload; skipped: boolean } | null; prediction?: { payload: AnswerPayload; skipped: boolean } | null }) {
+export async function finishQuizAction(input: { sessionId: string; currentIndex: number; answers: { questionId: string; selfAnswer?: { payload: AnswerPayload; skipped: boolean } | null; prediction?: { payload: AnswerPayload; skipped: boolean } | null }[] }) {
   const user = await requireUser();
   const repo = await getRepository();
   const result = await runWrite(repo, async (tx) => {
-    const saved = await saveQuizProgress(tx, user.profile.id, input);
+    const saved = await saveQuizBatch(tx, user.profile.id, input);
     if (!saved.ok) return saved;
+    if (saved.data.added.length) return { ok: true as const, data: { added: saved.data.added } };
     return completeQuiz(tx, user.profile.id, input.sessionId);
   });
   if (!result.ok) return { error: result.error };
-  if (!("roundId" in result.data)) return { error: "Could not submit this quiz." };
+  if ("added" in result.data) return { added: result.data.added };
   redirect(`/play/results/${result.data.roundId}`);
 }
 

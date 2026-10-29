@@ -40,17 +40,19 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   const reduce = useReducedMotion();
   const needsSelf = mode === "reveal" || mode === "exchange" || mode === "daily";
   const needsGuess = mode !== "reveal";
-  const steps = useMemo(() => questions.flatMap((question) => {
+  const [questionList, setQuestionList] = useState(questions);
+  const steps = useMemo(() => questionList.flatMap((question) => {
     const list: { question: PlayerQuestion; phase: "self" | "guess" }[] = [];
     if (needsSelf) list.push({ question, phase: "self" });
     if (needsGuess) list.push({ question, phase: "guess" });
     return list;
-  }), [questions, needsGuess, needsSelf]);
+  }), [questionList, needsGuess, needsSelf]);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(steps.length - 1, 0)));
   const [drafts, setDrafts] = useState(initial);
   const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [seconds, setSeconds] = useState(timerSeconds);
+  const saving = useRef(Promise.resolve());
   const step = steps[index];
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -70,52 +72,84 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
     setDrafts((current) => ({ ...current, [step.question.id]: { ...current[step.question.id], [step.phase]: { payload, skipped } } }));
   }
 
-  async function persist(nextIndex: number) {
-    setPending(true);
-    setError("");
-    const current = drafts[step.question.id] ?? {};
-    const phaseDraft = sharedDraft(step.phase, current[step.phase] ?? draft);
-    const result = await saveQuizAction({
-      sessionId,
-      questionId: step.question.id,
-      currentIndex: nextIndex,
-      selfAnswer: step.phase === "self" ? phaseDraft : current.self ?? null,
-      prediction: step.phase === "guess" ? phaseDraft : current.guess ?? null,
+  function rememberAdded(afterId: string, added: PlayerQuestion[]) {
+    if (!added.length) return;
+    setQuestionList((current) => {
+      const next = [...current];
+      let insertAt = next.findIndex((item) => item.id === afterId) + 1;
+      if (insertAt <= 0) insertAt = next.length;
+      let changed = false;
+      for (const question of added) {
+        if (next.some((item) => item.id === question.id)) continue;
+        next.splice(insertAt, 0, question);
+        insertAt += 1;
+        changed = true;
+      }
+      return changed ? next : current;
     });
-    setPending(false);
-    if (result && "ok" in result && !result.ok) {
-      setError(result.error);
-      return false;
-    }
-    return true;
   }
 
-  async function submitQuiz() {
-    setPending(true);
-    setError("");
-    const current = drafts[step.question.id] ?? {};
-    const phaseDraft = sharedDraft(step.phase, current[step.phase] ?? draft);
-    const result = await finishQuizAction({
-      sessionId,
-      questionId: step.question.id,
-      currentIndex: steps.length,
-      selfAnswer: step.phase === "self" ? phaseDraft : current.self ?? null,
-      prediction: step.phase === "guess" ? phaseDraft : current.guess ?? null,
-    });
-    if (result && "error" in result) {
-      setError(result.error);
-      setPending(false);
-    }
+  function enqueueSave(payload: { questionId: string; currentIndex: number; selfAnswer: Draft | null; prediction: Draft | null }) {
+    saving.current = saving.current.then(async () => {
+      const result = await saveQuizAction({ sessionId, ...payload });
+      if (!result || !("ok" in result)) return;
+      if (!result.ok) {
+        if (result.error !== "This quiz has already been submitted.") setError(result.error);
+        return;
+      }
+      rememberAdded(payload.questionId, result.data.added.map(toPlayerQuestion));
+    }).catch(() => setError("Could not save this answer. Try again."));
   }
 
-  async function go(nextIndex: number) {
+  function go(nextIndex: number) {
+    if (!step) return;
     if (nextIndex > index && !draft.skipped && !hasPayload(draft.payload)) {
       setError("Choose an answer, or skip this question.");
       return;
     }
-    const saved = await persist(nextIndex);
-    if (!saved) return;
+    const stored = drafts[step.question.id] ?? {};
+    const phaseDraft = sharedDraft(step.phase, draft);
+    setError("");
     setIndex(nextIndex);
+    enqueueSave({
+      questionId: step.question.id,
+      currentIndex: nextIndex,
+      selfAnswer: step.phase === "self" ? phaseDraft : stored.self ?? null,
+      prediction: step.phase === "guess" ? phaseDraft : stored.guess ?? null,
+    });
+  }
+
+  async function submitQuiz() {
+    if (!step) return;
+    setSubmitting(true);
+    setError("");
+    await saving.current;
+    const stored = drafts[step.question.id] ?? {};
+    const phaseDraft = sharedDraft(step.phase, draft);
+    const merged = { ...drafts, [step.question.id]: { ...stored, [step.phase]: phaseDraft } };
+    const result = await finishQuizAction({
+      sessionId,
+      currentIndex: steps.length,
+      answers: questionList.map((question) => {
+        const row = merged[question.id];
+        const self = row?.self;
+        return {
+          questionId: question.id,
+          selfAnswer: self ? sharedDraft("self", self) : null,
+          prediction: row?.guess ?? null,
+        };
+      }),
+    });
+    if (result && "added" in result && result.added && result.added.length > 0) {
+      rememberAdded(step.question.id, result.added.map(toPlayerQuestion));
+      setError("Your answer added another question.");
+      setSubmitting(false);
+      return;
+    }
+    if (result && "error" in result && result.error) {
+      setError(result.error);
+      setSubmitting(false);
+    }
   }
 
   useEffect(() => {
@@ -153,7 +187,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
             </AlertDialogContent>
           </AlertDialog>
         ) : (
-          <Button type="button" variant="ghost" size="icon" aria-label="Previous" disabled={pending} onClick={() => { if (hasPayload(draft.payload) || draft.skipped) void persist(index); setIndex((value) => Math.max(0, value - 1)); }}><ChevronLeft /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Previous" disabled={submitting} onClick={() => { if (hasPayload(draft.payload) || draft.skipped) enqueueSave({ questionId: step.question.id, currentIndex: index, selfAnswer: step.phase === "self" ? sharedDraft(step.phase, draft) : drafts[step.question.id]?.self ?? null, prediction: step.phase === "guess" ? draft : drafts[step.question.id]?.guess ?? null }); setIndex((value) => Math.max(0, value - 1)); }}><ChevronLeft /></Button>
         )}
         <p className="truncate text-center text-sm font-semibold">{title}</p>
         <p className="text-sm font-medium text-primary tabular-nums">{index + 1} / {steps.length}</p>
@@ -172,17 +206,16 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
         </div>
       </motion.section>
       {error && <p className="mt-4 text-sm text-destructive" role="alert">{error}</p>}
-      {pending && <p className="mt-3 text-center text-sm text-muted-foreground">Saving…</p>}
       <div className="mt-auto grid gap-3 pt-8 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between">
           <Button type="button" variant="ghost" onClick={() => update({}, true)}>Skip for now</Button>
           <Button type="button" variant="ghost" onClick={() => update({}, false)}>Clear</Button>
         </div>
         {index < steps.length - 1 ? (
-          <Button type="button" className="h-12 w-full" disabled={pending} onClick={() => go(index + 1)}>Next</Button>
+          <Button type="button" className="h-12 w-full" disabled={submitting} onClick={() => go(index + 1)}>Next</Button>
         ) : (
           <AlertDialog>
-            <AlertDialogTrigger asChild><Button type="button" className="h-12 w-full" disabled={pending}>Submit</Button></AlertDialogTrigger>
+            <AlertDialogTrigger asChild><Button type="button" className="h-12 w-full" disabled={submitting}>{submitting ? "Submitting…" : "Submit"}</Button></AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogTitle className="font-serif text-2xl">Submit this quiz?</AlertDialogTitle>
               <AlertDialogDescription className="mt-2 text-sm text-muted-foreground">You can review with Back before submitting. After this, the round follows its reveal rules.</AlertDialogDescription>
@@ -206,6 +239,10 @@ function swatch(label: string) {
     black: "#27272a", red: "#fb7185", orange: "#fb923c", white: "#f8fafc", brown: "#b45309",
   };
   return known[name] ?? "#e9d5ff";
+}
+
+function toPlayerQuestion(question: { id: string; selfPrompt: string; guessPrompt: string; reversePrompt: string; answerType: AnswerType; sensitive: boolean; options: PlayerQuestion["options"]; config: QuestionConfig; difficulty: string }): PlayerQuestion {
+  return { ...question, category: "Follow-up" };
 }
 
 function hasPayload(payload: AnswerPayload) {

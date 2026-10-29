@@ -11,6 +11,8 @@ export async function activeMembership(repo: Repository, userId: string) {
 }
 
 export async function requireMembership(repo: Repository, userId: string, coupleId: string): Promise<Result<CoupleMember>> {
+  const remembered = rememberedMembership(userId);
+  if (remembered.hit && remembered.membership?.coupleId === coupleId && remembered.membership.status === "active") return ok(remembered.membership);
   const member = await repo.find("coupleMembers", { eq: { userId, coupleId, status: "active" } });
   if (!member) return fail("You do not have access to this couple space.");
   return ok(member);

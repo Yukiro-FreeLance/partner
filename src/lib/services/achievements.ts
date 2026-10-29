@@ -4,12 +4,16 @@ import { compareResponses } from "@/lib/scoring";
 import { notifyUser } from "@/lib/services/access";
 
 export async function grantAchievements(repo: Repository, userId: string, coupleId: string | null) {
-  const catalog = await repo.list("achievements", {});
-  const owned = await repo.list("userAchievements", { eq: { userId } });
+  const [catalog, owned, sessions, snapshots, preferences, reflections, cards] = await Promise.all([
+    repo.list("achievements", {}),
+    repo.list("userAchievements", { eq: { userId } }),
+    repo.list("quizSessions", { eq: { userId, status: "completed" } }),
+    repo.list("scoreSnapshots", { eq: { userId } }),
+    repo.find("userPreferences", { eq: { userId } }),
+    repo.list("cardActivity", { eq: { userId, answered: true } }),
+    repo.list("conversationCards", {}),
+  ]);
   const ownedIds = new Set(owned.map((item) => item.achievementId));
-  const sessions = await repo.list("quizSessions", { eq: { userId, status: "completed" } });
-  const snapshots = await repo.list("scoreSnapshots", { eq: { userId } });
-  const preferences = await repo.find("userPreferences", { eq: { userId } });
   let points = preferences?.points ?? 0;
   const earned = new Set<string>();
 
@@ -18,8 +22,6 @@ export async function grantAchievements(repo: Repository, userId: string, couple
   if (snapshots.reduce((sum, snapshot) => sum + snapshot.incorrect, 0) >= 10) earned.add("ten-learned");
   if ((preferences?.dailyStreak ?? 0) >= 7) earned.add("seven-day-streak");
 
-  const reflections = await repo.list("cardActivity", { eq: { userId, answered: true } });
-  const cards = await repo.list("conversationCards", {});
   if (reflections.some((activity) => cards.find((card) => card.id === activity.cardId)?.depth === "emotional")) earned.add("deep-conversation");
 
   if (coupleId) {
@@ -28,9 +30,11 @@ export async function grantAchievements(repo: Repository, userId: string, couple
     if (partner) {
       const partnerShared = await repo.list("personalityResults", { eq: { userId: partner.userId, shared: true } });
       if (sharedTests.some((result) => partnerShared.some((item) => item.testId === result.testId))) earned.add("first-personality-comparison");
-      const mine = await repo.list("userAnswers", { eq: { userId, coupleId } });
-      const theirs = await repo.list("userAnswers", { eq: { userId: partner.userId, coupleId } });
-      const questions = await repo.list("questions", {});
+      const [mine, theirs] = await Promise.all([
+        repo.list("userAnswers", { eq: { userId, coupleId } }),
+        repo.list("userAnswers", { eq: { userId: partner.userId, coupleId } }),
+      ]);
+      const questions = mine.length ? await repo.list("questions", { in: { id: mine.map((answer) => answer.questionId) } }) : [];
       let shared = 0;
       for (const answer of mine) {
         const other = theirs.find((item) => item.questionId === answer.questionId && !item.skipped && !answer.skipped);
