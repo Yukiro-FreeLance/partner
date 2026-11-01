@@ -8,7 +8,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/feedback";
 import { Textarea } from "@/components/ui/field";
-import { finishQuizAction, saveQuizAction } from "@/app/actions";
 import type { AnswerPayload, AnswerType, QuestionConfig, QuizMode } from "@/lib/domain";
 
 export type PlayerQuestion = {
@@ -53,6 +52,15 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   const [submitting, setSubmitting] = useState(false);
   const [seconds, setSeconds] = useState(timerSeconds);
   const saving = useRef(Promise.resolve());
+  const confirmed = useRef<Map<string, string> | null>(null);
+  if (!confirmed.current) {
+    const saved = new Map<string, string>();
+    for (const [questionId, row] of Object.entries(initial)) {
+      if (row.self) saved.set(`${questionId}:self`, encodeDraft(row.self));
+      if (row.guess) saved.set(`${questionId}:guess`, encodeDraft(row.guess));
+    }
+    confirmed.current = saved;
+  }
   const step = steps[index];
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -91,13 +99,13 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
 
   function enqueueSave(payload: { questionId: string; currentIndex: number; selfAnswer: Draft | null; prediction: Draft | null }) {
     saving.current = saving.current.then(async () => {
-      const result = await saveQuizAction({ sessionId, ...payload });
-      if (!result || !("ok" in result)) return;
-      if (!result.ok) {
-        if (result.error !== "This quiz has already been submitted.") setError(result.error);
+      const result = await postQuiz("/api/quiz/save", { sessionId, ...payload }) as { ok?: boolean; error?: string; data?: { added?: PlayerQuestion[] } };
+      if (!result?.ok) {
+        if (result?.error && result.error !== "This quiz has already been submitted.") setError(result.error);
         return;
       }
-      rememberAdded(payload.questionId, result.data.added.map(toPlayerQuestion));
+      if (confirmed.current) markSaved(confirmed.current, payload.questionId, payload.selfAnswer, payload.prediction);
+      rememberAdded(payload.questionId, (result.data?.added ?? []).map(toPlayerQuestion));
     }).catch(() => setError("Could not save this answer. Try again."));
   }
 
@@ -123,33 +131,31 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
     if (!step) return;
     setSubmitting(true);
     setError("");
-    await saving.current;
     const stored = drafts[step.question.id] ?? {};
     const phaseDraft = sharedDraft(step.phase, draft);
     const merged = { ...drafts, [step.question.id]: { ...stored, [step.phase]: phaseDraft } };
-    const result = await finishQuizAction({
-      sessionId,
-      currentIndex: steps.length,
-      answers: questionList.map((question) => {
-        const row = merged[question.id];
-        const self = row?.self;
-        return {
-          questionId: question.id,
-          selfAnswer: self ? sharedDraft("self", self) : null,
-          prediction: row?.guess ?? null,
-        };
-      }),
+    const answers = questionList.flatMap((question) => {
+      const row = merged[question.id];
+      const self = row?.self ? sharedDraft("self", row.self) : null;
+      const guess = row?.guess ?? null;
+      const selfDirty = needsSelf && encodeDraft(self) !== (confirmed.current?.get(`${question.id}:self`) ?? "");
+      const guessDirty = needsGuess && encodeDraft(guess) !== (confirmed.current?.get(`${question.id}:guess`) ?? "");
+      if (!selfDirty && !guessDirty) return [];
+      return [{ questionId: question.id, selfAnswer: selfDirty ? self : null, prediction: guessDirty ? guess : null }];
     });
-    if (result && "added" in result && result.added && result.added.length > 0) {
+    const result = await postQuiz("/api/quiz/finish", { sessionId, currentIndex: steps.length, answers }) as { roundId?: string; error?: string; added?: PlayerQuestion[] };
+    if (result?.roundId) {
+      router.replace(`/play/results/${result.roundId}`);
+      return;
+    }
+    if (result?.added && result.added.length > 0) {
       rememberAdded(step.question.id, result.added.map(toPlayerQuestion));
       setError("Your answer added another question.");
       setSubmitting(false);
       return;
     }
-    if (result && "error" in result && result.error) {
-      setError(result.error);
-      setSubmitting(false);
-    }
+    setError(result?.error || "Could not submit this quiz.");
+    setSubmitting(false);
   }
 
   useEffect(() => {
@@ -239,6 +245,20 @@ function swatch(label: string) {
     black: "#27272a", red: "#fb7185", orange: "#fb923c", white: "#f8fafc", brown: "#b45309",
   };
   return known[name] ?? "#e9d5ff";
+}
+
+function encodeDraft(value: Draft | null | undefined) {
+  return value ? JSON.stringify(value) : "";
+}
+
+function markSaved(store: Map<string, string>, questionId: string, selfAnswer: Draft | null, prediction: Draft | null) {
+  if (selfAnswer) store.set(`${questionId}:self`, encodeDraft(selfAnswer));
+  if (prediction) store.set(`${questionId}:guess`, encodeDraft(prediction));
+}
+
+async function postQuiz(path: string, body: unknown) {
+  const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return response.json();
 }
 
 function toPlayerQuestion(question: { id: string; selfPrompt: string; guessPrompt: string; reversePrompt: string; answerType: AnswerType; sensitive: boolean; options: PlayerQuestion["options"]; config: QuestionConfig; difficulty: string }): PlayerQuestion {

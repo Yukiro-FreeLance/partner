@@ -112,6 +112,32 @@ export async function readSessionUserId() {
   return (await readSession())?.userId ?? null;
 }
 
+export async function readEffectiveUserId() {
+  const session = await readSession();
+  if (session) {
+    const impersonated = await impersonatedId(session.userId);
+    return impersonated ?? session.userId;
+  }
+  if (!isSupabaseConfigured()) return null;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return null;
+  const impersonated = await impersonatedId(data.user.id);
+  return impersonated ?? data.user.id;
+}
+
+async function impersonatedId(actorId: string) {
+  const token = (await cookies()).get(IMPERSONATION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.act !== actorId || typeof payload.sub !== "string" || payload.sub === actorId) return null;
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
+
 export async function setSessionCookie(userId: string) {
   const repo = await getRepository();
   const profile = await repo.find("profiles", { eq: { id: userId } });

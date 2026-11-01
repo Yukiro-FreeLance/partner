@@ -9,7 +9,7 @@ import { sendAuthLink, sendNotice } from "@/lib/email";
 import { getRepository } from "@/lib/data";
 import { runWrite } from "@/lib/data/repository";
 import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, resendVerification, resetPassword, verifyEmailToken } from "@/lib/auth/accounts";
-import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, forgetAppSession, getCurrentUser, isStaffRole, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
+import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, forgetAppSession, getCurrentUser, isStaffRole, readEffectiveUserId, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
 import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
@@ -353,30 +353,32 @@ export async function dailyAction() {
 }
 
 export async function saveQuizAction(input: { sessionId: string; questionId: string; currentIndex: number; selfAnswer?: { payload: AnswerPayload; skipped: boolean } | null; prediction?: { payload: AnswerPayload; skipped: boolean } | null }) {
-  const user = await requireUser();
+  const userId = await readEffectiveUserId();
+  if (!userId) return { ok: false as const, error: "Sign in to save." };
   const repo = await getRepository();
-  return saveQuizProgress(repo, user.profile.id, input);
+  return saveQuizProgress(repo, userId, input);
 }
 
 export async function completeQuizAction(sessionId: string) {
-  const user = await requireUser();
+  const userId = await readEffectiveUserId();
+  if (!userId) return { error: "Sign in to submit." };
   const repo = await getRepository();
-  const result = await completeQuiz(repo, user.profile.id, sessionId);
+  const result = await completeQuiz(repo, userId, sessionId);
   if (!result.ok) return { error: result.error };
   redirect(`/play/results/${result.data.roundId}`);
 }
 
 export async function finishQuizAction(input: { sessionId: string; currentIndex: number; answers: { questionId: string; selfAnswer?: { payload: AnswerPayload; skipped: boolean } | null; prediction?: { payload: AnswerPayload; skipped: boolean } | null }[] }) {
-  const user = await requireUser();
+  const userId = await readEffectiveUserId();
+  if (!userId) return { error: "Sign in to submit." };
   const repo = await getRepository();
-  const result = await runWrite(repo, async (tx) => {
-    const saved = await saveQuizBatch(tx, user.profile.id, input);
-    if (!saved.ok) return saved;
-    if (saved.data.added.length) return { ok: true as const, data: { added: saved.data.added } };
-    return completeQuiz(tx, user.profile.id, input.sessionId);
-  });
+  if (input.answers.length) {
+    const saved = await saveQuizBatch(repo, userId, input);
+    if (!saved.ok) return { error: saved.error };
+    if (saved.data.added.length) return { added: saved.data.added };
+  }
+  const result = await completeQuiz(repo, userId, input.sessionId);
   if (!result.ok) return { error: result.error };
-  if ("added" in result.data) return { added: result.data.added };
   redirect(`/play/results/${result.data.roundId}`);
 }
 
