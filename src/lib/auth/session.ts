@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify, SignJWT } from "jose";
 import { accountStatusOf } from "@/lib/auth/account-status";
+import { recordSignIn, touchPresence } from "@/lib/auth/presence";
 import { rememberMembership } from "@/lib/auth/request-scope";
 import { isAdminEmail, isSuperAdminEmail, isSupabaseConfigured } from "@/lib/config";
 import { getRepository } from "@/lib/data";
@@ -149,6 +150,7 @@ export async function setSessionCookie(userId: string) {
     path: "/",
     maxAge: 60 * 60 * 24 * 14,
   });
+  await recordSignIn(repo, userId);
 }
 
 export async function clearSessionCookie() {
@@ -295,6 +297,7 @@ export const loadAppSession = cache(async function loadAppSession(): Promise<App
     rememberMembership(effective.id, shell.membership);
     const loaded = { user: { profile: effective, preferences, actor: target ? synced : null }, membership: shell.membership, unread: shell.unread };
     if (!loaded.user.actor) cachedSessions().set(loaded.user.profile.id, { at: Date.now(), value: loaded });
+    void touchPresence(repo, synced.id);
     return loaded;
   }
   if (isSupabaseConfigured()) {
@@ -336,6 +339,7 @@ export const loadAppSession = cache(async function loadAppSession(): Promise<App
     const preferences = samePerson && storedPreferences ? storedPreferences : await preferencesFor(repo, effective.id);
     const shell = samePerson ? actorShell : await shellFor(repo, effective.id);
     rememberMembership(effective.id, shell.membership);
+    void touchPresence(repo, profile.id);
     return { user: { profile: effective, preferences, actor: target ? profile : null }, membership: shell.membership, unread: shell.unread };
   }
   return null;

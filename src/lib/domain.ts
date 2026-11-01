@@ -62,6 +62,8 @@ export type Profile = {
   accountStatus?: "active" | "archived" | "deleted";
   isDemo: boolean;
   emailVerified: boolean;
+  lastLoginAt?: string | null;
+  lastSeenAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
