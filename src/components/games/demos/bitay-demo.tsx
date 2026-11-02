@@ -8,10 +8,11 @@ import { cn } from "@/lib/utils";
 import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip } from "@/components/games/game-ui";
 import { isGameSfxMuted, playGameSfx, setGameSfxMuted } from "@/lib/game-sfx";
+import { BITAY_EXTRA_BANK } from "@/lib/games/bitay-bank";
 
 type Entry = { word: string; hint: string; category: string };
 
-const BANK: Entry[] = [
+const BASE_BANK: Entry[] = [
   { word: "TIGER", hint: "Striped big cat", category: "Animals" },
   { word: "ELEPHANT", hint: "Largest land animal", category: "Animals" },
   { word: "PENGUIN", hint: "Flightless bird that swims", category: "Animals" },
@@ -64,7 +65,8 @@ const BANK: Entry[] = [
   { word: "FIREWALL", hint: "Network security barrier", category: "Tech" },
 ];
 
-const CATEGORIES = ["All", "Animals", "Sports", "Food", "Places", "Tech"] as const;
+const BANK: Entry[] = [...BASE_BANK, ...BITAY_EXTRA_BANK];
+const CATEGORIES = ["All", ...Array.from(new Set(BANK.map((item) => item.category)))];
 const ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 const MAX_WRONG = 6;
 
