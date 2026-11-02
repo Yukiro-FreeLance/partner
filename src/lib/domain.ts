@@ -466,6 +466,38 @@ export type UserPreferences = {
   recentCardIds: string[];
   onboardingStep: string;
   onboardingCompleted: boolean;
+  showOnGameLeaderboard?: boolean;
+};
+
+export type GameScoreMode = "solo" | "partner";
+export type GameMatchKind = "challenge" | "hotseat";
+export type GameMatchStatus = "open" | "complete";
+export type GameMatchSeat = "host" | "guest";
+
+export type GameScore = {
+  id: string;
+  userId: string;
+  coupleId: string | null;
+  gameSlug: string;
+  mode: GameScoreMode;
+  kind: "solo" | GameMatchKind;
+  score: number;
+  matchId: string | null;
+  createdAt: string;
+};
+
+export type GameMatch = {
+  id: string;
+  coupleId: string;
+  gameSlug: string;
+  kind: GameMatchKind;
+  hostId: string;
+  guestId: string;
+  hostScore: number | null;
+  guestScore: number | null;
+  status: GameMatchStatus;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Report = {
@@ -844,6 +876,8 @@ export type Database = {
   itineraryChecklists: ItineraryChecklist[];
   itineraryComments: ItineraryComment[];
   itineraryHistory: ItineraryHistory[];
+  gameScores: GameScore[];
+  gameMatches: GameMatch[];
 };
 
 export type TableName = keyof Database;

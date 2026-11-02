@@ -1,0 +1,83 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { startArcadeMatchAction } from "@/app/actions-games";
+import { GameDemo } from "@/components/games/game-demo";
+import { GamePlaySession } from "@/components/games/game-play-session";
+import { Button } from "@/components/ui/button";
+import { requireUser } from "@/lib/auth/session";
+import { getRepository } from "@/lib/data";
+import { arcadeGame } from "@/lib/games/catalog";
+import { activeMembership, otherPartner } from "@/lib/services/access";
+import { loadGameMatch } from "@/lib/services/games";
+import type { ArcadeKind, ArcadeMode, ArcadeSeat } from "@/components/games/arcade-score";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const game = arcadeGame(slug);
+  return { title: game?.title ?? "Game" };
+}
+
+export default async function ArcadeGamePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ mode?: string; kind?: string; match?: string; error?: string }>;
+}) {
+  const { slug } = await params;
+  const query = await searchParams;
+  const game = arcadeGame(slug);
+  if (!game) notFound();
+  const user = await requireUser();
+  const repo = await getRepository();
+  const membership = await activeMembership(repo, user.profile.id);
+  const partner = membership ? await otherPartner(repo, membership.coupleId, user.profile.id) : null;
+  const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
+  const match = query.match ? await loadGameMatch(repo, user.profile.id, query.match) : null;
+  const mode: ArcadeMode = query.mode === "partner" || match ? "partner" : "solo";
+  const kind: ArcadeKind = match?.kind ?? (query.kind === "hotseat" || query.kind === "challenge" ? query.kind : "solo");
+  const seat: ArcadeSeat = match && match.guestId === user.profile.id ? "guest" : "host";
+  const rankingEnabled = Boolean(user.preferences.showOnGameLeaderboard);
+
+  return (
+    <main className="grid w-full gap-4 px-4 py-5 lg:px-8">
+      <header className="max-w-3xl">
+        <p className="text-sm text-muted-foreground">
+          <Link href="/play/games" className="underline">Arcade games</Link>
+          {" · "}
+          <Link href={`/play/games/ranks?game=${encodeURIComponent(game.slug)}`} className="underline">Ranking</Link>
+        </p>
+        <h1 className="mt-2 font-serif text-4xl">{game.emoji} {game.title}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{game.short} {game.controls}</p>
+        {query.error && <p className="mt-3 text-sm text-destructive" role="alert">{query.error}</p>}
+      </header>
+      {mode === "solo" && partner && (
+        <div className="flex flex-wrap gap-2">
+          <form action={startArcadeMatchAction}>
+            <input type="hidden" name="slug" value={game.slug} />
+            <input type="hidden" name="kind" value="hotseat" />
+            <Button type="submit" variant="outline">Play on one device</Button>
+          </form>
+          <form action={startArcadeMatchAction}>
+            <input type="hidden" name="slug" value={game.slug} />
+            <input type="hidden" name="kind" value="challenge" />
+            <Button type="submit" variant="outline">Challenge {partnerProfile?.displayName.split(" ")[0] ?? "partner"}</Button>
+          </form>
+        </div>
+      )}
+      <GamePlaySession
+        slug={game.slug}
+        title={game.title}
+        pvp={game.pvp}
+        mode={mode}
+        kind={kind}
+        seat={seat}
+        matchId={match?.id ?? null}
+        partnerName={partnerProfile?.displayName ?? null}
+        rankingEnabled={rankingEnabled}
+      >
+        <GameDemo slug={game.slug} />
+      </GamePlaySession>
+    </main>
+  );
+}

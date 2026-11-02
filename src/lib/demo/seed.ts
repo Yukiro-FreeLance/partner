@@ -118,10 +118,41 @@ export async function ensureDemoIdentity(repo: Repository) {
   });
 }
 
+async function ensureDemoGames(repo: Repository, mayaId: string, jordanId: string, coupleId: string, stamp: string) {
+  if ((await repo.list("gameScores", { eq: { userId: mayaId } }, { limit: 1 })).length) return;
+  await repo.update("userPreferences", mayaId, { showOnGameLeaderboard: true });
+  await repo.insert("gameScores", {
+    id: createId(),
+    userId: mayaId,
+    coupleId,
+    gameSlug: "tetris",
+    mode: "solo",
+    kind: "solo",
+    score: 18600,
+    matchId: null,
+    createdAt: stamp,
+  });
+  await repo.insert("gameScores", {
+    id: createId(),
+    userId: jordanId,
+    coupleId,
+    gameSlug: "tetris",
+    mode: "solo",
+    kind: "solo",
+    score: 22140,
+    matchId: null,
+    createdAt: stamp,
+  });
+}
+
 export async function ensureDemo(repo: Repository) {
   await ensureContent(repo);
   if (await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } })) {
     await ensureDemoCycle(repo);
+    const maya = await repo.find("profiles", { eq: { email: DEMO_MAYA_EMAIL } });
+    const jordan = await repo.find("profiles", { eq: { email: DEMO_JORDAN_EMAIL } });
+    const membership = maya ? await repo.find("coupleMembers", { eq: { userId: maya.id, status: "active" } }) : null;
+    if (maya && jordan && membership) await ensureDemoGames(repo, maya.id, jordan.id, membership.coupleId, new Date().toISOString());
     return;
   }
   const stamp = new Date().toISOString();
@@ -245,6 +276,8 @@ export async function ensureDemo(repo: Repository) {
     readAt: null,
     createdAt: stamp,
   });
+  await repo.update("userPreferences", mayaId, { showOnGameLeaderboard: true });
+  await ensureDemoGames(repo, mayaId, jordanId, coupleId, stamp);
   await ensureDemoCycle(repo);
 }
 

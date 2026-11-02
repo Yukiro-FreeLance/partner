@@ -60,6 +60,8 @@ export function emptyDatabase(): Database {
     itineraryChecklists: [],
     itineraryComments: [],
     itineraryHistory: [],
+    gameScores: [],
+    gameMatches: [],
   };
 }
 

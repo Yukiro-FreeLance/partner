@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Heart, LifeBuoy, Lock, LogOut, Settings, Shield, Users } from "lucide-react";
+import { Bell, Gamepad2, Heart, LifeBuoy, Lock, LogOut, Settings, Shield, Users } from "lucide-react";
 import { logoutAction, settingsAction } from "@/app/actions";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { BannerUpload } from "@/components/banner-upload";
@@ -15,6 +15,7 @@ export const metadata = { title: "Profile" };
 
 const rows = [
   ["/settings", "Account Settings", Settings],
+  ["/play/games", "Arcade games", Gamepad2],
   ["/notifications", "Notification Preferences", Bell],
   ["/settings#privacy", "Privacy & Security", Shield],
   ["/memories", "Memories", Heart],

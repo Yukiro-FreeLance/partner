@@ -521,6 +521,9 @@ export async function settingsAction(formData: FormData) {
     streakPaused: formData.get("streakPaused") === "on",
     reducedMotion: formData.get("reducedMotion") === "on",
     reminderHour: formString(formData, "reminderHour") ? Number(formString(formData, "reminderHour")) : null,
+    showOnGameLeaderboard: formData.has("gameRankingPrivacy")
+      ? formData.get("showOnGameLeaderboard") === "on"
+      : Boolean(preferences?.showOnGameLeaderboard),
   };
   if (preferences) await repo.update("userPreferences", user.profile.id, nextPreferences);
   else await repo.insert("userPreferences", nextPreferences);
@@ -532,6 +535,8 @@ export async function settingsAction(formData: FormData) {
   revalidatePath("/profile");
   revalidatePath("/home");
   revalidatePath("/cycle");
+  revalidatePath("/play/games");
+  revalidatePath("/play/games/ranks");
   redirect(formString(formData, "returnTo") === "/profile" ? "/profile?saved=1" : "/settings?saved=1");
 }
 
