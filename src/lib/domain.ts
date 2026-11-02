@@ -509,6 +509,62 @@ export type GameMatchSnapshot = {
   guestStatus?: "playing" | "completed" | "failed";
 };
 
+export type JournalVisibility = "private" | "partner" | "public";
+export type MovieWatchStatus = "watched" | "watching" | "want_to_watch";
+export type PlaceCategory = "nature" | "restaurant" | "tourist_attraction" | "historical" | "other";
+
+export type MovieEntry = {
+  id: string;
+  userId: string;
+  tmdbId: number | null;
+  title: string;
+  posterUrl: string | null;
+  releaseYear: number | null;
+  genre: string[];
+  director: string | null;
+  durationMinutes: number | null;
+  watchedDate: string | null;
+  status: MovieWatchStatus;
+  rating: number | null;
+  tags: string[];
+  visibility: JournalVisibility;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MovieReflection = {
+  id: string;
+  movieId: string;
+  userId: string;
+  body: string;
+  learned: string | null;
+  memorableScene: string | null;
+  favoriteCharacter: string | null;
+  lifeLesson: string | null;
+  interpretation: string | null;
+  visibility: JournalVisibility;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VisitedPlace = {
+  id: string;
+  userId: string;
+  name: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  photoUrls: string[];
+  visitedOn: string | null;
+  notes: string | null;
+  reflection: string | null;
+  rating: number | null;
+  category: PlaceCategory;
+  visibility: JournalVisibility;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GameMatch = {
   id: string;
   coupleId: string;
@@ -905,6 +961,9 @@ export type Database = {
   itineraryHistory: ItineraryHistory[];
   gameScores: GameScore[];
   gameMatches: GameMatch[];
+  movieEntries: MovieEntry[];
+  movieReflections: MovieReflection[];
+  visitedPlaces: VisitedPlace[];
 };
 
 export type TableName = keyof Database;

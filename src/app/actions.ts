@@ -12,14 +12,15 @@ import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, 
 import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, forgetAppSession, getCurrentUser, isStaffRole, readEffectiveUserId, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
-import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, registerSchema, resetSchema } from "@/lib/validators";
+import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, movieSchema, placeSchema, reflectionSchema, registerSchema, resetSchema } from "@/lib/validators";
 import { pauseCycleSharing } from "@/lib/services/cycle";
 import { acceptInvitation, createCouple, createInvitation, invitationKey, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
-import { completeQuiz, getOrCreateDaily, saveQuizBatch, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
+import { completeQuiz, getOrCreateDaily, getOrCreateIntimacyDaily, saveQuizBatch, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { activeMembership, couplePartners, writeAudit } from "@/lib/services/access";
 import { saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
 import { addReflection, adminStats, blockUser, createCustomCard, createCustomQuestion, createMemory, deleteAccount, deleteMemory, fileReport, markSimilarity, reviewReport, saveAdminQuestion, saveCardState, updateMemory } from "@/lib/services/life";
+import { addMovieReflection, cleanList, createMovie, createPlace, deleteMovie, deletePlace, deleteReflection, updateMovie } from "@/lib/services/journal";
 import type { AnswerPayload, QuizMode } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,6 +34,11 @@ function isNextControlFlow(error: unknown) {
 
 function formString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
+}
+
+function optionalNumber(formData: FormData, key: string) {
+  const value = formString(formData, key).trim();
+  return value ? Number(value) : null;
 }
 
 function accountRole(value: string) {
@@ -450,6 +456,69 @@ export async function deleteMemoryAction(formData: FormData) {
   const repo = await getRepository();
   await deleteMemory(repo, user.profile.id, formString(formData, "memoryId"));
   redirect("/memories");
+}
+
+export async function intimacyDailyAction(formData: FormData) {
+  const user = await requireUser();
+  // The prompt is intentionally gated at the action boundary, not only in the UI.
+  // The form supplies this explicit adult opt-in.
+  if (formData.get("adult") !== "on" || !user.profile.emailVerified) redirect(`/play?error=${encodeURIComponent(formData.get("adult") !== "on" ? "Confirm that you are 18 or older to open intimacy prompts." : "Verify your email before opening intimacy prompts.")}`);
+  const daily = await getOrCreateIntimacyDaily(await getRepository(), user.profile.id);
+  if (!daily.ok) redirect(`/play?error=${encodeURIComponent(daily.error)}`);
+  redirect(`/play/quiz/${daily.data.session.id}`);
+}
+
+export async function movieAction(_state: FormState, formData: FormData) {
+  const user = await requireUser();
+  const parsed = movieSchema.safeParse({
+    title: formString(formData, "title"), tmdbId: optionalNumber(formData, "tmdbId"), posterUrl: formString(formData, "posterUrl") || null,
+    releaseYear: optionalNumber(formData, "releaseYear"), genre: formString(formData, "genre"), director: formString(formData, "director"),
+    durationMinutes: optionalNumber(formData, "durationMinutes"), watchedDate: formString(formData, "watchedDate"), status: formString(formData, "status"),
+    rating: optionalNumber(formData, "rating"), tags: formString(formData, "tags"), visibility: formString(formData, "visibility"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the movie details." };
+  const repo = await getRepository();
+  const input = { ...parsed.data, tmdbId: parsed.data.tmdbId ?? null, posterUrl: parsed.data.posterUrl || null, releaseYear: parsed.data.releaseYear ?? null, genre: cleanList(parsed.data.genre), director: parsed.data.director || null, durationMinutes: parsed.data.durationMinutes ?? null, watchedDate: parsed.data.watchedDate || null, rating: parsed.data.rating ?? null, tags: cleanList(parsed.data.tags), visibility: parsed.data.visibility };
+  const id = formString(formData, "movieId");
+  const saved = id ? await updateMovie(repo, user.profile.id, id, input) : await createMovie(repo, user.profile.id, input);
+  if (!saved.ok) return { error: saved.error };
+  redirect(`/journal/movies/${saved.data.id}`);
+}
+
+export async function deleteMovieAction(formData: FormData) {
+  const user = await requireUser();
+  await deleteMovie(await getRepository(), user.profile.id, formString(formData, "movieId"));
+  redirect("/journal");
+}
+
+export async function movieReflectionAction(_state: FormState, formData: FormData) {
+  const user = await requireUser();
+  const parsed = reflectionSchema.safeParse({ body: formString(formData, "body"), learned: formString(formData, "learned"), memorableScene: formString(formData, "memorableScene"), favoriteCharacter: formString(formData, "favoriteCharacter"), lifeLesson: formString(formData, "lifeLesson"), interpretation: formString(formData, "interpretation"), visibility: formString(formData, "visibility") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the reflection." };
+  const saved = await addMovieReflection(await getRepository(), user.profile.id, formString(formData, "movieId"), { ...parsed.data, learned: parsed.data.learned || null, memorableScene: parsed.data.memorableScene || null, favoriteCharacter: parsed.data.favoriteCharacter || null, lifeLesson: parsed.data.lifeLesson || null, interpretation: parsed.data.interpretation || null });
+  if (!saved.ok) return { error: saved.error };
+  redirect(`/journal/movies/${formString(formData, "movieId")}`);
+}
+
+export async function deleteReflectionAction(formData: FormData) {
+  const user = await requireUser();
+  await deleteReflection(await getRepository(), user.profile.id, formString(formData, "reflectionId"));
+  redirect(`/journal/movies/${formString(formData, "movieId")}`);
+}
+
+export async function placeAction(_state: FormState, formData: FormData) {
+  const user = await requireUser();
+  const parsed = placeSchema.safeParse({ name: formString(formData, "name"), address: formString(formData, "address"), latitude: optionalNumber(formData, "latitude"), longitude: optionalNumber(formData, "longitude"), photoUrls: formString(formData, "photoUrls"), visitedOn: formString(formData, "visitedOn"), notes: formString(formData, "notes"), reflection: formString(formData, "reflection"), rating: optionalNumber(formData, "rating"), category: formString(formData, "category"), visibility: formString(formData, "visibility") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the place details." };
+  const saved = await createPlace(await getRepository(), user.profile.id, { ...parsed.data, address: parsed.data.address || null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, photoUrls: cleanList(parsed.data.photoUrls), visitedOn: parsed.data.visitedOn || null, notes: parsed.data.notes || null, reflection: parsed.data.reflection || null, rating: parsed.data.rating ?? null });
+  if (!saved.ok) return { error: saved.error };
+  redirect("/journal");
+}
+
+export async function deletePlaceAction(formData: FormData) {
+  const user = await requireUser();
+  await deletePlace(await getRepository(), user.profile.id, formString(formData, "placeId"));
+  redirect("/journal");
 }
 
 export async function cardAction(formData: FormData) {

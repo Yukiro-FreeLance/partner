@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, Ticket, UserRound } from "lucide-react";
+import { Bell, BookHeart, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, Ticket, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { DashboardSearch } from "@/components/dashboard-search";
 import { Avatar } from "@/components/ui/feedback";
@@ -126,6 +126,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
             <ShellLink href="/personality" active={pathname.startsWith("/personality")} icon={Brain}>Personality Lab</ShellLink>
             <ShellLink href="/connection" active={pathname.startsWith("/connection")} icon={Heart}>Our Connection</ShellLink>
             <ShellLink href="/memories" active={pathname.startsWith("/memories")} icon={ImageIcon}>Memories</ShellLink>
+            <ShellLink href="/journal" active={pathname.startsWith("/journal")} icon={BookHeart}>Personal journal</ShellLink>
             <ShellLink href="/plans" active={pathname.startsWith("/plans")} icon={Ticket}>Date plans</ShellLink>
             <ShellLink href="/cycle" active={pathname.startsWith("/cycle")} icon={CalendarHeart}>{tracksCycle ? "Cycle" : "Partner cycle"}</ShellLink>
             <ShellLink href="/profile" active={pathname.startsWith("/profile")} icon={UserRound}>{copy.profile}</ShellLink>

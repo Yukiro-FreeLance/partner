@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { startQuizAction } from "@/app/actions";
+import { intimacyDailyAction, startQuizAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { categories } from "@/lib/content/catalog";
@@ -65,6 +65,9 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
             </Link>
           ))}
         </div>
+      </section>
+      <section className="panel border border-rose-200 bg-rose-50/40 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-serif text-2xl">Daily intimacy prompt</h2><p className="mt-1 text-sm text-muted-foreground">An adult-only, consent-first question chosen randomly from your intimate question bank. Skipping is always okay.</p></div><form action={intimacyDailyAction} className="grid gap-2"><label className="text-xs"><input type="checkbox" name="adult" required /> I am 18 or older</label><Button type="submit">Open today’s prompt</Button></form></div>
       </section>
       <section className="grid gap-3 lg:grid-cols-2">
         {modes.map(([mode, title, size, description, category]) => (

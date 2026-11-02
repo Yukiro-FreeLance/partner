@@ -820,6 +820,28 @@ export async function getOrCreateDaily(repo: Repository, userId: string) {
   return ok({ ...started.data, resetAt, dayKey: key, timeZone: DAILY_TIME_ZONE });
 }
 
+export async function getOrCreateIntimacyDaily(repo: Repository, userId: string) {
+  const membership = await activeMembership(repo, userId);
+  if (!membership) return fail("Create or join a couple before starting an intimate prompt.");
+  const key = todayKey();
+  const rounds = await repo.list("quizRounds", { eq: { coupleId: membership.coupleId, mode: "daily" } });
+  const existing = rounds.find((round) => round.title === "Today's intimate prompt" && dayKey(new Date(round.createdAt)) === key);
+  if (existing) {
+    const joined = await joinRound(repo, userId, existing.id);
+    if (!joined.ok) return joined;
+    return ok(joined.data);
+  }
+  const categories = await repo.list("questionCategories", {});
+  const intimacy = categories.find((category) => category.slug === "intimacy");
+  if (!intimacy) return fail("The intimacy question bank is not ready.");
+  const recentIds = new Set(rounds.slice(-14).flatMap(() => [] as string[]));
+  for (const round of rounds.slice(-14)) for (const link of await repo.list("quizRoundQuestions", { eq: { roundId: round.id } })) recentIds.add(link.questionId);
+  const pool = (await repo.list("questions", { eq: { categoryId: intimacy.id, isActive: true, sensitive: true } })).filter((question) => !question.dependsOn && !recentIds.has(question.id) && question.visibility === "public");
+  const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+  if (!picked.length) return fail("The intimate question bank is empty.");
+  return startQuiz(repo, userId, { mode: "daily", title: "Today's intimate prompt", questionIds: picked.map((question) => question.id), size: picked.length, categories: [intimacy.id], includeSensitive: true });
+}
+
 export async function listRoundCards(repo: Repository, userId: string) {
   const membership = await activeMembership(repo, userId);
   if (!membership) return [];

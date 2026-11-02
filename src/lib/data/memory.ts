@@ -62,6 +62,9 @@ export function emptyDatabase(): Database {
     itineraryHistory: [],
     gameScores: [],
     gameMatches: [],
+    movieEntries: [],
+    movieReflections: [],
+    visitedPlaces: [],
   };
 }
 
