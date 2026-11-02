@@ -49,10 +49,12 @@ export default function FlappyBirdDemo() {
   const flap = useCallback(() => {
     if (over) {
       reset();
+      birdV.current = FLAP;
       return;
     }
     if (!running) {
       setRunning(true);
+      birdV.current = FLAP;
       return;
     }
     birdV.current = FLAP;
@@ -213,11 +215,22 @@ export default function FlappyBirdDemo() {
         ref={canvasRef}
         width={W}
         height={H}
-        onClick={flap}
-        className="cursor-pointer rounded-xl border border-sky-500/30 shadow-[0_0_40px_rgba(56,189,248,0.15)]"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          flap();
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") flap();
+        }}
+        className="h-auto w-full max-w-[320px] cursor-pointer touch-none rounded-xl border border-sky-500/30 shadow-[0_0_40px_rgba(56,189,248,0.15)]"
         aria-label="Flappy Bird game canvas"
       />
-      <GameTip>Space / click to thrust</GameTip>
+      <Button type="button" size="lg" className="w-full max-w-[320px] sm:hidden" onClick={flap}>
+        {over ? "Play again" : running ? "Flap" : "Start and flap"}
+      </Button>
+      <GameTip>Tap, click, Enter, or Space to flap · R restarts</GameTip>
     </div>
   );
 }
