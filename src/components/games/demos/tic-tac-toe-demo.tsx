@@ -72,15 +72,22 @@ export default function TicTacToeDemo() {
   const arcade = useArcadeScore();
   const [board, setBoard] = useState<Board>(Array(9).fill(null));
   const [mode, setMode] = useState<"ai" | "pvp">(arcade.pvp ? "pvp" : "ai");
-  const winner = checkWinner(board);
-  const isXTurn = board.filter(Boolean).length % 2 === 0;
+  const challenge = arcade.kind === "challenge";
+  const cells: Board = challenge ? (arcade.board ?? Array<Player>(9).fill(null)) : board;
+  const winner = checkWinner(cells);
+  const isXTurn = cells.filter(Boolean).length % 2 === 0;
   useEffect(() => {
     if (arcade.pvp) setMode("pvp");
   }, [arcade.pvp]);
-  useReportWhen(Boolean(winner), winner === "X" ? 100 : winner === "draw" ? 50 : 0);
+  useReportWhen(!challenge && Boolean(winner), winner === "X" ? 100 : winner === "draw" ? 50 : 0);
 
   const handleClick = useCallback(
     (index: number) => {
+      if (challenge) {
+        if (!arcade.canPlay) return;
+        arcade.playMove(index);
+        return;
+      }
       if (board[index] || winner) return;
       if (mode === "ai" && !isXTurn) return;
 
@@ -99,7 +106,7 @@ export default function TicTacToeDemo() {
         }, 300);
       }
     },
-    [board, winner, mode, isXTurn]
+    [board, winner, mode, isXTurn, challenge, arcade]
   );
 
   function reset() {
@@ -110,7 +117,13 @@ export default function TicTacToeDemo() {
     ? winner === "draw"
       ? "Draw!"
       : `${winner} wins!`
-    : mode === "ai"
+    : challenge
+      ? arcade.pending
+        ? "Sending move…"
+        : arcade.canPlay
+          ? `Your turn (${arcade.seat === "host" ? "X" : "O"})`
+          : "Partner's turn"
+      : mode === "ai"
       ? isXTurn
         ? "Your turn (X)"
         : "AI thinking…"
@@ -118,33 +131,35 @@ export default function TicTacToeDemo() {
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <GameHud>
-        <Button
-          size="sm"
-          className="rounded-sm"
-          variant={mode === "ai" ? "default" : "outline"}
-          onClick={() => {
-            setMode("ai");
-            reset();
-          }}
-        >
-          vs AI
-        </Button>
-        <Button
-          size="sm"
-          className="rounded-sm"
-          variant={mode === "pvp" ? "default" : "outline"}
-          onClick={() => {
-            setMode("pvp");
-            reset();
-          }}
-        >
-          2 Player
-        </Button>
-        <Button size="sm" variant="ghost" className="rounded-sm" onClick={reset}>
-          Reset
-        </Button>
-      </GameHud>
+      {!challenge && (
+        <GameHud>
+          <Button
+            size="sm"
+            className="rounded-sm"
+            variant={mode === "ai" ? "default" : "outline"}
+            onClick={() => {
+              setMode("ai");
+              reset();
+            }}
+          >
+            vs AI
+          </Button>
+          <Button
+            size="sm"
+            className="rounded-sm"
+            variant={mode === "pvp" ? "default" : "outline"}
+            onClick={() => {
+              setMode("pvp");
+              reset();
+            }}
+          >
+            2 Player
+          </Button>
+          <Button size="sm" variant="ghost" className="rounded-sm" onClick={reset}>
+            Reset
+          </Button>
+        </GameHud>
+      )}
 
       <p
         className={cn(
@@ -158,22 +173,22 @@ export default function TicTacToeDemo() {
       </p>
 
       <div
-        className="grid grid-cols-3 gap-2.5 rounded-xl border border-border/50 bg-muted/20 p-3 shadow-inner"
+        className="grid aspect-square w-full max-w-[30rem] grid-cols-3 gap-2.5 rounded-2xl border border-border/50 bg-muted/20 p-3 shadow-inner sm:gap-3 sm:p-4"
         role="grid"
         aria-label="Tic tac toe board"
       >
-        {board.map((cell, i) => (
+        {cells.map((cell, i) => (
           <button
             key={i}
             type="button"
             onClick={() => handleClick(i)}
-            disabled={!!cell || !!winner || (mode === "ai" && !isXTurn)}
+            disabled={!!cell || !!winner || (challenge ? !arcade.canPlay || arcade.pending : mode === "ai" && !isXTurn)}
             className={cn(
-              "relative flex h-16 w-16 items-center justify-center rounded-lg border text-3xl font-black transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:h-20 md:w-20",
+              "relative flex aspect-square min-h-20 items-center justify-center rounded-xl border text-4xl font-black transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:text-5xl md:text-6xl",
               "border-border/60 bg-card/90 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 active:scale-95",
               cell === "X" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.25)]",
               cell === "O" && "border-violet-500/40 bg-violet-500/10 text-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.25)]",
-              winner && WIN_LINES.some((line) => line.includes(i) && line.every((idx) => board[idx] === winner)) &&
+              winner && WIN_LINES.some((line) => line.includes(i) && line.every((idx) => cells[idx] === winner)) &&
                 "ring-2 ring-primary scale-105"
             )}
             aria-label={cell ? `Cell ${i + 1}: ${cell}` : `Empty cell ${i + 1}`}
@@ -182,7 +197,7 @@ export default function TicTacToeDemo() {
           </button>
         ))}
       </div>
-      <GameTip>Perfect-information duel · Minimax opponent</GameTip>
+      <GameTip>{challenge ? `Two devices · challenging ${arcade.partnerName ?? "your partner"} · host is X, guest is O` : "Perfect-information duel · Minimax opponent"}</GameTip>
     </div>
   );
 }

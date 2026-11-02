@@ -47,11 +47,11 @@ export async function writeAudit(repo: Repository, userId: string | null, action
 
 export async function notifyUser(
   repo: Repository,
-  input: { userId: string; coupleId?: string | null; type: string; title: string; body: string; href?: string | null },
+  input: { userId: string; coupleId?: string | null; type: string; title: string; body: string; href?: string | null; metadata?: Record<string, string> | null },
 ) {
   const preferences = await repo.find("userPreferences", { eq: { userId: input.userId } });
   if (!preferences || preferences.inAppNotifications) {
-    await repo.insert("notifications", {
+    const notification = {
       id: crypto.randomUUID(),
       userId: input.userId,
       coupleId: input.coupleId ?? null,
@@ -59,9 +59,20 @@ export async function notifyUser(
       title: input.title,
       body: input.body,
       href: input.href ?? null,
+      metadata: input.metadata ?? null,
       readAt: null,
       createdAt: new Date().toISOString(),
-    });
+    };
+    try {
+      await repo.insert("notifications", notification);
+    } catch (error) {
+      // Keep existing Supabase projects working until the optional metadata
+      // migration has been applied and PostgREST refreshes its schema cache.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/metadata.*column|column.*metadata|schema cache/i.test(message)) throw error;
+      const { metadata: _metadata, ...legacyNotification } = notification;
+      await repo.insert("notifications", legacyNotification);
+    }
   }
   if (!preferences?.emailNotifications) return;
   const profile = await repo.find("profiles", { eq: { id: input.userId } });

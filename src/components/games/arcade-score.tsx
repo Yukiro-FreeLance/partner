@@ -11,7 +11,13 @@ type ArcadeScoreContextValue = {
   kind: ArcadeKind;
   seat: ArcadeSeat;
   pvp: boolean;
+  canPlay: boolean;
+  pending: boolean;
+  partnerName: string | null;
+  board: Array<"X" | "O" | null> | null;
   reportScore: (score: number) => void;
+  reportProgress: (note: string, score?: number) => void;
+  playMove: (cell: number) => void;
 };
 
 const ArcadeScoreContext = createContext<ArcadeScoreContextValue>({
@@ -19,7 +25,13 @@ const ArcadeScoreContext = createContext<ArcadeScoreContextValue>({
   kind: "solo",
   seat: "host",
   pvp: false,
+  canPlay: true,
+  pending: false,
+  partnerName: null,
+  board: null,
   reportScore: () => {},
+  reportProgress: () => {},
+  playMove: () => {},
 });
 
 export function ArcadeScoreProvider({

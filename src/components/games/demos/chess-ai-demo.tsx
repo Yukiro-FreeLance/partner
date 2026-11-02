@@ -633,7 +633,7 @@ export default function ChessAiDemo() {
 
       <div
         className={cn(
-          "relative grid grid-cols-8 overflow-hidden rounded-xl border-2 border-border/70 shadow-xl shadow-black/30 transition-transform",
+          "relative grid aspect-square w-full max-w-[34rem] grid-cols-8 overflow-hidden rounded-2xl border-2 border-border/70 shadow-xl shadow-black/30 transition-transform",
           thinking && "scale-[0.99] opacity-95"
         )}
         role="grid"
@@ -659,7 +659,7 @@ export default function ChessAiDemo() {
               onClick={() => onSquare(i)}
               disabled={!!gameOver || thinking}
               className={cn(
-                "relative flex h-10 w-10 items-center justify-center text-2xl transition-all duration-150 md:h-12 md:w-12 md:text-[1.75rem]",
+                "relative flex aspect-square min-h-0 min-w-0 items-center justify-center text-[clamp(1.35rem,5vw,2.25rem)] transition-all duration-150",
                 dark
                   ? "bg-[#1a3a2f] hover:brightness-110"
                   : "bg-[#d5e6d0] text-zinc-900 hover:brightness-95 dark:bg-[#2a4a3c] dark:text-zinc-100",

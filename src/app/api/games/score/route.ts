@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
-import { submitGameScore, type ArcadeKind } from "@/lib/services/games";
+import { gameMatchView, loadGameMatch, submitGameScore, type ArcadeKind } from "@/lib/services/games";
 import type { GameMatchSeat, GameScoreMode } from "@/lib/domain";
 
 export async function POST(request: Request) {
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     kind?: ArcadeKind;
     matchId?: string | null;
     seat?: GameMatchSeat;
+    note?: string;
   };
   try {
     body = await request.json();
@@ -32,7 +33,15 @@ export async function POST(request: Request) {
     kind,
     matchId: typeof body.matchId === "string" ? body.matchId : null,
     seat: body.seat === "guest" ? "guest" : "host",
+    note: typeof body.note === "string" ? body.note : undefined,
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json({ ok: true, matchId: result.data.matchId, score: result.data.score });
+  const repo = await getRepository();
+  const match = result.data.matchId ? await loadGameMatch(repo, user.profile.id, result.data.matchId) : null;
+  return NextResponse.json({
+    ok: true,
+    matchId: result.data.matchId,
+    score: result.data.score,
+    match: match ? gameMatchView(match, user.profile.id) : null,
+  });
 }

@@ -102,7 +102,7 @@ export default function BioverseDemo() {
 
       <p className="text-center text-sm text-muted-foreground">{message}</p>
 
-      <div className="w-full rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="w-full rounded-2xl border border-border bg-muted/40 p-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           DNA template
         </p>
@@ -112,7 +112,7 @@ export default function BioverseDemo() {
               key={`${base}-${i}`}
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-lg border text-sm font-bold",
-                "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                "border-primary/40 bg-secondary text-secondary-foreground"
               )}
             >
               {base}
@@ -127,7 +127,7 @@ export default function BioverseDemo() {
             {picked.map((base, i) => (
               <span
                 key={`rna-${i}`}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-sm font-bold text-emerald-300"
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/40 bg-secondary text-sm font-bold text-secondary-foreground"
               >
                 {base}
               </span>

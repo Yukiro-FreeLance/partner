@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, Ticket, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { DashboardSearch } from "@/components/dashboard-search";
 import { Avatar } from "@/components/ui/feedback";
 import { PwaClient } from "@/components/pwa-client";
+import { ChallengeInviteModal, type ChallengeInvite } from "@/components/challenge-invite-modal";
 import { navigationCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +25,12 @@ const playLinks = [
 
 export function AppShell({ children, name, avatarUrl, demo, unread, locale, impersonating = false, superAdmin = false, tracksCycle = false }: { children: React.ReactNode; name: string; avatarUrl: string | null; demo: boolean; unread: number; locale: string; impersonating?: boolean; superAdmin?: boolean; tracksCycle?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
   const copy = navigationCopy(locale);
+  const seenChallenges = useRef<Set<string> | null>(null);
   const [count, setCount] = useState(unread);
   const [playOpen, setPlayOpen] = useState(true);
+  const [challengeInvite, setChallengeInvite] = useState<ChallengeInvite | null>(null);
   const quiz = pathname.includes("/play/quiz/");
   const wide = pathname.startsWith("/admin");
   const phone = !quiz && !wide;
@@ -43,16 +47,42 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
     async function poll() {
       const response = await fetch("/api/notifications");
       if (!response.ok) return;
-      const body = (await response.json()) as { unread?: number };
-      if (!cancelled && typeof body.unread === "number") setCount(body.unread);
+       const body = (await response.json()) as { unread?: number; challenges?: ChallengeInvite[] };
+      if (cancelled) return;
+       if (typeof body.unread === "number") setCount(body.unread);
+       const challenges = body.challenges ?? [];
+       if (!seenChallenges.current && challenges[0]) setChallengeInvite(challenges[0]);
+       if (seenChallenges.current) {
+        for (const challenge of challenges) {
+          if (seenChallenges.current.has(challenge.id)) continue;
+           setChallengeInvite((current) => current ?? challenge);
+        }
+      }
+      seenChallenges.current = new Set([...(seenChallenges.current ?? []), ...challenges.map((challenge) => challenge.id)]);
     }
     void poll();
-    const timer = window.setInterval(() => void poll(), 30000);
+    const timer = window.setInterval(() => void poll(), 5000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [router]);
+
+  async function respondToChallenge(response: "accept" | "reject" | "wait") {
+    if (!challengeInvite) return;
+    if (response === "wait") {
+      setChallengeInvite(null);
+      window.setTimeout(() => setChallengeInvite(challengeInvite), 5000);
+      return;
+    }
+    await fetch("/api/notifications/challenge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ notificationId: challengeInvite.id, response }) });
+    const href = challengeInvite.href;
+    setChallengeInvite(null);
+    if (response === "accept" && href) {
+      router.push(href);
+      router.refresh();
+    }
+  }
 
   return (
     <div className={cn("min-h-dvh", impersonating && "pt-14", phone && "lg:grid lg:grid-cols-[240px_minmax(0,1fr)]")}>
@@ -65,12 +95,12 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
       <a href="#content" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-full focus:bg-card focus:px-3 focus:py-2">{copy.skip}</a>
       <p className="sr-only">Signed in as {name}</p>
       {phone && (
-        <aside className={cn("sticky hidden grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r border-[#f3e8f5] bg-white px-3 pt-4 pb-4 lg:grid", impersonating ? "top-14 h-[calc(100dvh-3.5rem)]" : "top-0 h-dvh")}>
+        <aside className={cn("sticky hidden grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r border-border bg-card px-3 pt-4 pb-4 lg:grid", impersonating ? "top-14 h-[calc(100dvh-3.5rem)]" : "top-0 h-dvh")}>
           <div className="px-1"><Logo /></div>
           <nav className="mt-4 grid content-start gap-1 overflow-y-auto pr-1" aria-label="Desktop">
             <ShellLink href="/home" active={pathname.startsWith("/home")} icon={House}>{copy.home}</ShellLink>
             <div>
-              <div className={cn("flex items-center rounded-2xl", pathname.startsWith("/play") && "bg-[#fde7f3]")}>
+              <div className={cn("flex items-center rounded-2xl", pathname.startsWith("/play") && "bg-accent text-accent-foreground")}>
                 <Link href="/play" className="flex min-h-11 flex-1 items-center gap-3 px-3 text-sm font-medium">
                   <Gamepad2 className="size-4" aria-hidden />
                   Partner Quiz
@@ -101,7 +131,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
             <ShellLink href="/profile" active={pathname.startsWith("/profile")} icon={UserRound}>{copy.profile}</ShellLink>
             {superAdmin && <ShellLink href="/admin/users" active={pathname.startsWith("/admin/users")} icon={Shield}>User list</ShellLink>}
           </nav>
-          <div className="border-t border-[#f6eef8] px-2 pt-3 pb-1">
+          <div className="border-t border-border px-2 pt-3 pb-1">
             <p className="font-serif text-xs leading-4 font-medium text-muted-foreground italic">Better questions. Deeper conversations. A stronger us.</p>
             <form action={logoutAction}><button className="mt-1 flex h-10 w-full items-center text-left text-sm text-muted-foreground">{copy.logout}</button></form>
           </div>
@@ -109,20 +139,20 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
       )}
       <div className="min-w-0">
         {phone && (
-          <header className="sticky top-0 z-30 hidden items-center gap-4 border-b border-transparent bg-[#fbf7fc]/90 px-6 py-4 backdrop-blur lg:flex">
+          <header className="sticky top-0 z-30 hidden items-center gap-4 border-b border-transparent bg-background/90 px-6 py-4 backdrop-blur lg:flex">
             <DashboardSearch />
-            <Link href="/notifications" className="relative flex size-11 items-center justify-center rounded-full bg-white shadow-[var(--shadow)]" aria-label={count ? `Notifications, ${count} unread` : "Notifications"}>
+            <Link href="/notifications" className="relative flex size-11 items-center justify-center rounded-full bg-card shadow-[var(--shadow)]" aria-label={count ? `Notifications, ${count} unread` : "Notifications"}>
               <Bell className="size-4" aria-hidden />
               {count > 0 && <span className="absolute top-2 right-2 size-2 rounded-full bg-rose" />}
             </Link>
-            <Link href="/profile" className="flex min-h-11 items-center gap-2 rounded-full bg-white py-1 pr-3 pl-1 shadow-[var(--shadow)]" aria-label="Profile">
+            <Link href="/profile" className="flex min-h-11 items-center gap-2 rounded-full bg-card py-1 pr-3 pl-1 shadow-[var(--shadow)]" aria-label="Profile">
               <Avatar name={name} src={avatarUrl} className="size-9 text-xs" />
               <span className="text-sm font-medium">{name.split(" ")[0]}</span>
             </Link>
           </header>
         )}
         {phone && (
-          <header className="sticky top-0 z-30 flex items-center justify-between bg-[#fbf7fc]/95 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 backdrop-blur lg:hidden">
+          <header className="sticky top-0 z-30 flex items-center justify-between bg-background/95 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 backdrop-blur lg:hidden">
             <Logo />
             <div className="flex items-center gap-1">
               <Link href="/plans" className="flex size-11 items-center justify-center" aria-label="Date plans"><Ticket className="size-5" aria-hidden /></Link>
@@ -136,11 +166,12 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
           </header>
         )}
         {demo && phone && <p className="mx-4 mt-3 rounded-2xl bg-secondary px-4 py-2 text-center text-sm text-secondary-foreground">Fictional demo. Maya and Jordan are sample people, not real users.</p>}
-        {phone && <PwaClient />}
+      {phone && <PwaClient />}
+        {challengeInvite && <ChallengeInviteModal invite={challengeInvite} onClose={() => setChallengeInvite(null)} onRespond={(response) => void respondToChallenge(response)} />}
         <div id="content" className={cn(phone && "safe-pb")}>{children}</div>
       </div>
       {phone && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[#f3e8f5] bg-white/95 px-1 pt-1 backdrop-blur lg:hidden" style={{ paddingBottom: "max(0.4rem, env(safe-area-inset-bottom))" }} aria-label="App">
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1 pt-1 backdrop-blur lg:hidden" style={{ paddingBottom: "max(0.4rem, env(safe-area-inset-bottom))" }} aria-label="App">
           <ul className="grid grid-cols-5">
             {mobile.map((item) => {
               const Icon = item.icon;
@@ -172,7 +203,7 @@ function Logo() {
 
 function ShellLink({ href, active, icon: Icon, children }: { href: string; active: boolean; icon: typeof House; children: React.ReactNode }) {
   return (
-    <Link href={href} className={cn("flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm", active ? "bg-[#fde7f3] font-semibold text-primary" : "text-foreground/80 hover:bg-[#faf5ff]")}>
+    <Link href={href} className={cn("flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm", active ? "bg-accent font-semibold text-accent-foreground" : "text-foreground/80 hover:bg-secondary")}>
       <Icon className="size-4" aria-hidden />
       {children}
     </Link>

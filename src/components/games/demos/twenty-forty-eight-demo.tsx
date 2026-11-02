@@ -165,7 +165,7 @@ export default function TwentyFortyEightDemo() {
       )}
 
       <div
-        className="grid grid-cols-4 gap-2 rounded-xl border border-border/50 bg-gradient-to-br from-muted/50 to-background p-2.5 shadow-inner"
+        className="grid aspect-square w-full max-w-[30rem] grid-cols-4 gap-2.5 rounded-2xl border border-border/50 bg-gradient-to-br from-muted/50 to-background p-3 shadow-inner sm:gap-3 sm:p-4"
         role="grid"
         aria-label="2048 board"
       >
@@ -174,7 +174,7 @@ export default function TwentyFortyEightDemo() {
             <div
               key={`${r}-${c}`}
               className={cn(
-                "flex h-16 w-16 items-center justify-center rounded-lg text-lg font-bold transition-all duration-200 md:h-[4.5rem] md:w-[4.5rem]",
+                "flex aspect-square min-h-16 items-center justify-center rounded-xl text-xl font-bold transition-all duration-200 sm:text-2xl md:text-3xl",
                 val
                   ? cn(TILE_STYLES[val] ?? "bg-amber-200 text-black", "scale-100 shadow-md")
                   : "bg-card/40"

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useReportWhen } from "@/components/games/arcade-score";
+import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
 
 const WORD_BANK = [
   "react", "typescript", "nextjs", "tailwind", "component", "function",
@@ -18,6 +18,7 @@ function pickWords(count: number) {
 }
 
 export default function TypingChallengeDemo() {
+  const { reportProgress } = useArcadeScore();
   const [words, setWords] = useState<string[]>(() =>
     ["react", "typescript", "nextjs", "tailwind", "component", "function", "async", "promise"]
   );
@@ -52,6 +53,17 @@ export default function TypingChallengeDemo() {
     return Math.round((correct / total) * 100);
   }, [correct, errors]);
   useReportWhen(done, wpm * 10 + accuracy);
+
+  const liveStats = useRef({ wpm, accuracy });
+  useEffect(() => {
+    liveStats.current = { wpm, accuracy };
+  }, [wpm, accuracy]);
+
+  useEffect(() => {
+    if (!started || done) return;
+    const stats = liveStats.current;
+    reportProgress(`Word ${Math.min(index + 1, words.length)}/${words.length} · ${stats.wpm} WPM`, stats.wpm * 10 + stats.accuracy);
+  }, [index, started, done, words.length, reportProgress]);
 
   const reset = useCallback(() => {
     setWords(pickWords(12));
@@ -107,7 +119,7 @@ export default function TypingChallengeDemo() {
         </Button>
       </div>
 
-      <div className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-center text-lg leading-relaxed tracking-wide">
+      <div className="w-full rounded-2xl border border-border bg-muted/40 p-5 text-center text-lg leading-relaxed tracking-wide">
         {words.map((word, i) => (
           <span
             key={`${word}-${i}`}

@@ -38,21 +38,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <h1 className="font-serif text-4xl">Settings</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">Your name, gender, and couple details are visible inside your space. Cycle records stay private until you share a specific category. Invitation links use {origin.replace(/^https?:\/\//, "")}, the site you are on now.</p>
       </header>
-      {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">Settings saved.</p>}
+      {saved === "1" && <p className="rounded-2xl bg-secondary px-4 py-3 text-sm text-secondary-foreground" role="status">Settings saved.</p>}
       {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{error}</p>}
       <div className="grid items-start gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]">
-        <section className="rounded-[1.75rem] bg-white p-6 text-center shadow-[var(--shadow)]">
+        <section className="rounded-[1.75rem] bg-card p-6 text-center text-card-foreground shadow-[var(--shadow)]">
           <AvatarUpload name={user.profile.displayName} src={user.profile.avatarUrl} />
           <p className="mt-4 font-serif text-2xl">{user.profile.displayName}</p>
           <p className="text-sm text-muted-foreground">{genderLabel(user.profile.gender)}</p>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">Your partner can see this photo inside the couple space.</p>
         </section>
-        <form id="privacy" action={settingsAction} className="grid gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)] sm:grid-cols-2">
+        <form id="privacy" action={settingsAction} className="grid gap-4 rounded-[1.75rem] bg-card p-6 text-card-foreground shadow-[var(--shadow)] sm:grid-cols-2">
           <div className="sm:col-span-2">
             <h2 className="font-serif text-2xl">Account</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">Gender decides who keeps a cycle tracker. Female accounts can record a cycle. Everyone else sees only what a partner chooses to share.</p>
           </div>
           <input type="hidden" name="returnTo" value="/settings" />
+          <input type="hidden" name="privacyControls" value="1" />
           <label className="grid gap-2 sm:col-span-2"><Label htmlFor="displayName">Display name</Label><Input id="displayName" name="displayName" defaultValue={user.profile.displayName} /><Hint>This is the name on your home, quizzes, and invitations.</Hint></label>
           <div className="sm:col-span-2"><GenderField defaultValue={user.profile.gender} /></div>
           <div className="grid gap-2">
@@ -61,11 +62,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
           <label className="grid gap-2"><Label htmlFor="relationshipStartedOn">Together since</Label><Input id="relationshipStartedOn" name="relationshipStartedOn" type="date" defaultValue={user.profile.relationshipStartedOn ?? ""} /><Hint>Used for the days-together count. Leave it blank if you would rather not show a date.</Hint></label>
           <label className="grid gap-2 text-sm">Theme
-            <select name="theme" defaultValue={user.preferences.theme} className="h-11 rounded-2xl border bg-white px-3"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
+            <select name="theme" defaultValue={user.preferences.theme} className="h-11 rounded-2xl border border-border bg-background px-3 text-foreground"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
             <Hint>Light, dark, or match this device. Saved on this account.</Hint>
           </label>
           <label className="grid gap-2 text-sm">Language
-            <select name="locale" defaultValue={user.preferences.locale} className="h-11 rounded-2xl border bg-white px-3"><option value="en">English</option><option value="fil">Filipino</option></select>
+            <select name="locale" defaultValue={user.preferences.locale} className="h-11 rounded-2xl border border-border bg-background px-3 text-foreground"><option value="en">English</option><option value="fil">Filipino</option></select>
             <Hint>Menus and labels. Your partner can use a different language.</Hint>
           </label>
           <label className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border px-3 text-sm">In-app notifications <input name="inAppNotifications" type="checkbox" defaultChecked={user.preferences.inAppNotifications} /></label>
@@ -79,12 +80,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <div id="game-ranking" className="grid gap-2 rounded-2xl border px-3 py-3 sm:col-span-2">
             <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show me on the global game ranking <input name="showOnGameLeaderboard" type="checkbox" defaultChecked={Boolean(user.preferences.showOnGameLeaderboard)} /></label>
             <p className="text-xs leading-5 text-muted-foreground">Off by default. When this is on, other CoupleSync players can see your display name, photo, and best arcade scores. Quiz answers and personality results stay private either way.</p>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show my game statistics <input name="showGameStats" type="checkbox" defaultChecked={Boolean(user.preferences.showGameStats)} /></label>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show achievement points <input name="showGameAchievements" type="checkbox" defaultChecked={Boolean(user.preferences.showGameAchievements)} /></label>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Accept partner game challenges <input name="allowGameChallenges" type="checkbox" defaultChecked={user.preferences.allowGameChallenges !== false} /></label>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show my online status <input name="showOnlineStatus" type="checkbox" defaultChecked={user.preferences.showOnlineStatus !== false} /></label>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show my game activity <input name="showActivityStatus" type="checkbox" defaultChecked={user.preferences.showActivityStatus !== false} /></label>
+            <p className="text-xs leading-5 text-muted-foreground">These controls apply to rankings, game invitations, presence, and activity cards. Your own data is always visible to you.</p>
           </div>
           <Button type="submit" className="sm:col-span-2">Save settings</Button>
         </form>
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-3">
-        <section className="grid h-fit gap-3 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)]">
+        <section className="grid h-fit gap-3 rounded-[1.75rem] bg-card p-5 shadow-[var(--shadow)]">
           <h2 className="font-serif text-2xl">Invitation</h2>
           <p className="text-sm leading-6 text-muted-foreground">A code, link, or QR opens this same site. Pairing does not share cycle information.</p>
           <a className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="/pairing">Manage pairing, QR code, and invitation links</a>
@@ -108,14 +115,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           ))}
         </section>
         {partnerProfile && (
-          <section className="grid h-fit gap-3 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)]">
+          <section className="grid h-fit gap-3 rounded-[1.75rem] bg-card p-5 shadow-[var(--shadow)]">
             <h2 className="font-serif text-2xl">Block or report</h2>
             <p className="text-sm leading-6 text-muted-foreground">Blocking stops the couple view. A report goes to a reviewer and does not include cycle records.</p>
             <form action={blockAction}><input type="hidden" name="blockedId" value={partnerProfile.id} /><Button variant="outline" type="submit">Block {partnerProfile.displayName}</Button></form>
             <form action={reportAction} className="grid gap-2"><input type="hidden" name="targetType" value="user" /><input type="hidden" name="targetId" value={partnerProfile.id} /><Textarea name="reason" placeholder="What should a reviewer know?" /><Button type="submit" variant="outline">Send report</Button></form>
           </section>
         )}
-        <section className="grid h-fit gap-3 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)]">
+        <section className="grid h-fit gap-3 rounded-[1.75rem] bg-card p-5 shadow-[var(--shadow)]">
           <h2 className="font-serif text-2xl">Your data</h2>
           <p className="text-sm leading-6 text-muted-foreground">Download a copy, or erase the account. Cycle sharing, export, and deletion also live in cycle privacy.</p>
           <a className="text-sm underline" href="/cycle/settings">Cycle privacy, reminders, export, and deletion</a>

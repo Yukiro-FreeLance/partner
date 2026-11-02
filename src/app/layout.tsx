@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
+import { ThemeSync } from "@/components/theme-sync";
 import { siteOrigin } from "@/lib/site-origin";
 import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 import "./globals.css";
@@ -60,10 +61,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const store = await cookies();
   const theme = store.get("theme")?.value;
   const locale = store.get("locale")?.value === "fil" ? "fil" : "en";
-  const dark = theme === "dark" || (theme === "system" && false);
+  const dark = theme === "dark";
   return (
-    <html lang={locale} className={`${poppins.variable} ${montserrat.variable} h-full antialiased ${dark ? "dark" : ""}`}>
+    <html lang={locale} className={`${poppins.variable} ${montserrat.variable} h-full antialiased ${dark ? "dark" : ""}`} suppressHydrationWarning>
       <body className="min-h-full">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]*)/);var t=m?decodeURIComponent(m[1]):"light";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){}})();`,
+          }}
+        />
+        <ThemeSync />
         {children}
         <Suspense fallback={null}>
           <NavigationProgress />

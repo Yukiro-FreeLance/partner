@@ -449,6 +449,7 @@ export type AppNotification = {
   href: string | null;
   readAt: string | null;
   createdAt: string;
+  metadata?: Record<string, string> | null;
 };
 
 export type UserPreferences = {
@@ -467,6 +468,11 @@ export type UserPreferences = {
   onboardingStep: string;
   onboardingCompleted: boolean;
   showOnGameLeaderboard?: boolean;
+  showGameStats?: boolean;
+  showGameAchievements?: boolean;
+  allowGameChallenges?: boolean;
+  showOnlineStatus?: boolean;
+  showActivityStatus?: boolean;
 };
 
 export type GameScoreMode = "solo" | "partner";
@@ -486,6 +492,23 @@ export type GameScore = {
   createdAt: string;
 };
 
+export type GameMatchTurn = {
+  seat: GameMatchSeat;
+  score: number;
+  note: string;
+  at: string;
+};
+
+export type GameMatchSnapshot = {
+  note: string | null;
+  score: number | null;
+  board: Array<"X" | "O" | null> | null;
+  hostScore?: number | null;
+  guestScore?: number | null;
+  hostStatus?: "playing" | "completed" | "failed";
+  guestStatus?: "playing" | "completed" | "failed";
+};
+
 export type GameMatch = {
   id: string;
   coupleId: string;
@@ -495,6 +518,10 @@ export type GameMatch = {
   guestId: string;
   hostScore: number | null;
   guestScore: number | null;
+  turnSeat: GameMatchSeat;
+  revision: number;
+  turns: GameMatchTurn[];
+  snapshot: GameMatchSnapshot;
   status: GameMatchStatus;
   createdAt: string;
   updatedAt: string;

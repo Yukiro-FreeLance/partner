@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useReportWhen } from "@/components/games/arcade-score";
+import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip } from "@/components/games/game-ui";
 
 const SYMBOLS = ["◆", "▲", "●", "■", "✚", "◇", "⬡", "★"];
@@ -26,6 +26,7 @@ function createOrderedDeck(): Card[] {
 }
 
 export default function MemoryMatchDemo() {
+  const { reportProgress } = useArcadeScore();
   const [cards, setCards] = useState<Card[]>(createOrderedDeck);
   const [selected, setSelected] = useState<number[]>([]);
   const [score, setScore] = useState(0);
@@ -44,6 +45,10 @@ export default function MemoryMatchDemo() {
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, [won]);
+
+  useEffect(() => {
+    if (!won && score > 0) reportProgress(`Pair ${score}/8`, score);
+  }, [won, score, reportProgress]);
 
   const flip = useCallback(
     (id: number) => {
@@ -118,7 +123,7 @@ export default function MemoryMatchDemo() {
       )}
 
       <div
-        className="grid grid-cols-4 gap-2 border border-border/50 bg-muted/20 p-3"
+        className="grid w-full max-w-[30rem] grid-cols-4 gap-2.5 rounded-2xl border border-border/50 bg-muted/20 p-3 sm:gap-3 sm:p-4"
         role="grid"
         aria-label="Memory match cards"
       >
@@ -129,7 +134,7 @@ export default function MemoryMatchDemo() {
             onClick={() => flip(card.id)}
             disabled={card.matched || locked}
             className={cn(
-              "relative flex h-14 w-14 items-center justify-center border text-lg transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:h-16 md:w-16",
+              "relative flex aspect-square min-h-16 items-center justify-center rounded-xl border text-2xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:text-3xl md:text-4xl",
               card.flipped || card.matched
                 ? "border-primary/50 bg-primary/15 text-primary"
                 : "border-border/60 bg-card/90 text-muted-foreground hover:-translate-y-0.5 hover:border-primary/40 active:scale-95",

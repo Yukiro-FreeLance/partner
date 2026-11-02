@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Avatar } from "@/components/ui/feedback";
+import { RankingBoard } from "@/components/games/ranking-board";
 import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
 import { ARCADE_GAMES, arcadeGame } from "@/lib/games/catalog";
@@ -39,19 +39,7 @@ export default async function GameRanksPage({ searchParams }: { searchParams: Pr
           </Link>
         ))}
       </nav>
-      <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
-        {rows.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">No public scores yet. Play a game, then opt in if you want to show up.</p>}
-        <ol>
-          {rows.map((row) => (
-            <li key={row.userId} className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 last:border-b-0">
-              <span className="w-8 text-sm font-medium tabular-nums">{row.rank}</span>
-              <Avatar name={row.displayName} src={row.avatarUrl} className="size-9 text-xs" />
-              <span className="flex-1 text-sm">{row.displayName}{row.mine ? " · you" : ""}</span>
-              <span className="font-medium tabular-nums">{row.score}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <RankingBoard rows={rows} />
     </main>
   );
 }

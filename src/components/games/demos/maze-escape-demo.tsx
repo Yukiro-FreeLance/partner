@@ -138,7 +138,7 @@ export default function MazeEscapeDemo() {
       )}
 
       <div
-        className="grid gap-0.5 rounded-xl border border-emerald-500/25 bg-[#06140f] p-2 shadow-[0_0_30px_rgba(16,185,129,0.12)]"
+        className="grid aspect-square w-full max-w-[30rem] gap-0.5 rounded-2xl border border-emerald-500/25 bg-[#06140f] p-3 shadow-[0_0_30px_rgba(16,185,129,0.12)] sm:p-4"
         style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }}
         role="grid"
         aria-label="Maze"
@@ -151,7 +151,7 @@ export default function MazeEscapeDemo() {
               <div
                 key={`${x}-${y}`}
                 className={cn(
-                  "h-4 w-4 transition-all duration-150 md:h-5 md:w-5",
+                  "aspect-square min-h-0 min-w-0 transition-all duration-150",
                   cell === 1 && "rounded-[2px] bg-emerald-950/90",
                   cell === 0 && "bg-transparent",
                   isGoal && !isPlayer && "animate-pulse rounded-sm bg-emerald-400/70 shadow-[0_0_8px_rgba(52,211,153,0.8)]",
@@ -163,19 +163,19 @@ export default function MazeEscapeDemo() {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-1 md:hidden">
+      <div className="grid w-full max-w-xs grid-cols-3 gap-2 md:hidden">
         <div />
-        <Button size="sm" variant="secondary" className="rounded-sm" onClick={() => tryMove(0, -1)}>
+        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(0, -1)}>
           ↑
         </Button>
         <div />
-        <Button size="sm" variant="secondary" className="rounded-sm" onClick={() => tryMove(-1, 0)}>
+        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(-1, 0)}>
           ←
         </Button>
-        <Button size="sm" variant="secondary" className="rounded-sm" onClick={() => tryMove(0, 1)}>
+        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(0, 1)}>
           ↓
         </Button>
-        <Button size="sm" variant="secondary" className="rounded-sm" onClick={() => tryMove(1, 0)}>
+        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(1, 0)}>
           →
         </Button>
       </div>

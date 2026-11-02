@@ -1,144 +1,121 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Star as LuStar, Volume2 as LuVolume2, VolumeX as LuVolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useReportWhen } from "@/components/games/arcade-score";
+import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip } from "@/components/games/game-ui";
+import { isGameSfxMuted, playGameSfx, setGameSfxMuted } from "@/lib/game-sfx";
 
 type Entry = { word: string; hint: string; category: string };
 
 const BANK: Entry[] = [
-  { word: "WENDEV", hint: "This studio's brand", category: "Studio" },
+  { word: "TIGER", hint: "Striped big cat", category: "Animals" },
+  { word: "ELEPHANT", hint: "Largest land animal", category: "Animals" },
+  { word: "PENGUIN", hint: "Flightless bird that swims", category: "Animals" },
+  { word: "DOLPHIN", hint: "Marine mammal known for clicks", category: "Animals" },
+  { word: "GIRAFFE", hint: "Tallest living animal", category: "Animals" },
+  { word: "PANDA", hint: "Black-and-white bamboo eater", category: "Animals" },
+  { word: "KANGAROO", hint: "Pouched jumper from Australia", category: "Animals" },
+  { word: "EAGLE", hint: "Bird of prey with sharp vision", category: "Animals" },
+  { word: "OCTOPUS", hint: "Eight-armed sea creature", category: "Animals" },
+  { word: "CHEETAH", hint: "Fastest land animal", category: "Animals" },
+  { word: "SOCCER", hint: "Played with a round ball and goals", category: "Sports" },
+  { word: "TENNIS", hint: "Racket sport on a court", category: "Sports" },
+  { word: "BOXING", hint: "Fought in a ring with gloves", category: "Sports" },
+  { word: "BASEBALL", hint: "Bat, ball, and nine innings", category: "Sports" },
+  { word: "SWIMMING", hint: "Raced in a pool or open water", category: "Sports" },
+  { word: "CYCLING", hint: "Raced on two wheels", category: "Sports" },
+  { word: "HOCKEY", hint: "Played with a puck or ball and a stick", category: "Sports" },
+  { word: "GOLF", hint: "Lowest score on the course wins", category: "Sports" },
+  { word: "RUGBY", hint: "Oval ball and scrums", category: "Sports" },
+  { word: "BOWLING", hint: "Knock down ten pins", category: "Sports" },
+  { word: "PIZZA", hint: "Baked round pie with toppings", category: "Food" },
+  { word: "BURGER", hint: "Stacked sandwich on a bun", category: "Food" },
+  { word: "SUSHI", hint: "Vinegared rice and seafood", category: "Food" },
+  { word: "MANGO", hint: "Sweet tropical fruit", category: "Food" },
+  { word: "NOODLES", hint: "Long strands in a bowl", category: "Food" },
+  { word: "PANCAKE", hint: "Breakfast stack with syrup", category: "Food" },
+  { word: "AVOCADO", hint: "Green fruit used in guacamole", category: "Food" },
+  { word: "COCONUT", hint: "Hard-shelled tropical fruit", category: "Food" },
+  { word: "BANANA", hint: "Yellow fruit that peels", category: "Food" },
+  { word: "CHEESE", hint: "Dairy block on a pizza", category: "Food" },
+  { word: "MANILA", hint: "Capital of the Philippines", category: "Places" },
+  { word: "TOKYO", hint: "Capital of Japan", category: "Places" },
+  { word: "LONDON", hint: "Capital of England", category: "Places" },
+  { word: "PARIS", hint: "City of the Eiffel Tower", category: "Places" },
+  { word: "CEBU", hint: "Island in the Visayas", category: "Places" },
+  { word: "ISLAND", hint: "Land surrounded by water", category: "Places" },
+  { word: "DESERT", hint: "Dry, sandy region", category: "Places" },
+  { word: "CASTLE", hint: "Fortified royal home", category: "Places" },
+  { word: "BRIDGE", hint: "Structure that spans a river", category: "Places" },
+  { word: "MARKET", hint: "Place to buy and sell goods", category: "Places" },
   { word: "REACT", hint: "UI library by Meta", category: "Tech" },
-  { word: "NEXTJS", hint: "React meta-framework", category: "Tech" },
-  { word: "PRISMA", hint: "Type-safe ORM", category: "Tech" },
-  { word: "TAILWIND", hint: "Utility-first CSS", category: "Tech" },
-  { word: "TYPESCRIPT", hint: "Typed JavaScript", category: "Tech" },
-  { word: "LARAVEL", hint: "PHP web framework", category: "Tech" },
-  { word: "HANGMAN", hint: "The classic this is based on", category: "Game" },
-  { word: "BITAY", hint: "Filipino for this game", category: "Wika" },
-  { word: "KAIBIGAN", hint: "Filipino for friend", category: "Wika" },
-  { word: "KALAYAAN", hint: "Filipino for freedom", category: "Wika" },
-  { word: "BAYANIHAN", hint: "Communal help", category: "Wika" },
-  { word: "ALGORITHM", hint: "Step-by-step solution", category: "Tech" },
-  { word: "DATABASE", hint: "Where records live", category: "Tech" },
-  { word: "PORTFOLIO", hint: "A developer's showcase", category: "Studio" },
-  { word: "CLOUDFLARE", hint: "Edge network this site uses", category: "Tech" },
-  { word: "COMPONENT", hint: "Reusable UI piece", category: "Tech" },
-  { word: "FUNCTION", hint: "Named block of code", category: "Tech" },
+  { word: "PYTHON", hint: "Popular scripting language", category: "Tech" },
+  { word: "ANDROID", hint: "Mobile OS by Google", category: "Tech" },
+  { word: "BROWSER", hint: "App that opens the web", category: "Tech" },
+  { word: "KEYBOARD", hint: "Device you type on", category: "Tech" },
+  { word: "MONITOR", hint: "Screen on a desk", category: "Tech" },
+  { word: "SERVER", hint: "Machine that hosts a site", category: "Tech" },
+  { word: "ROUTER", hint: "Device that shares Wi-Fi", category: "Tech" },
+  { word: "DATABASE", hint: "Where records are stored", category: "Tech" },
+  { word: "FIREWALL", hint: "Network security barrier", category: "Tech" },
 ];
 
+const CATEGORIES = ["All", "Animals", "Sports", "Food", "Places", "Tech"] as const;
 const ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 const MAX_WRONG = 6;
 
-function pick(exclude?: string): Entry {
-  const pool = BANK.filter((item) => item.word !== exclude);
-  return pool[Math.floor(Math.random() * pool.length)] ?? BANK[0];
+function inCategory(item: Entry, category: string) {
+  return category === "All" || item.category === category;
+}
+
+function pick(exclude?: string, category = "All"): Entry {
+  const scoped = BANK.filter((item) => inCategory(item, category));
+  const pool = scoped.filter((item) => item.word !== exclude);
+  const source = pool.length ? pool : scoped;
+  return source[Math.floor(Math.random() * source.length)] ?? BANK[0];
+}
+
+function categoryCount(category: string) {
+  if (category === "All") return BANK.length;
+  return BANK.filter((item) => item.category === category).length;
 }
 
 function Gallows({ wrong, lost, won }: { wrong: number; lost: boolean; won: boolean }) {
-  const sway = lost ? { rotate: [0, 8, -6, 4, 0] } : won ? { y: [0, -6, 0] } : { rotate: 0 };
+  const body = lost ? "var(--destructive)" : won ? "var(--primary)" : "var(--rose)";
+  const rope = lost ? "var(--destructive)" : "var(--primary)";
   return (
     <motion.svg
-      viewBox="0 0 220 260"
-      className="h-56 w-48 overflow-visible text-foreground sm:h-64 sm:w-56"
-      animate={lost ? { x: [0, -6, 6, -4, 4, 0] } : won ? { scale: [1, 1.04, 1] } : {}}
-      transition={{ duration: lost ? 0.55 : 0.6 }}
+      viewBox="0 0 200 240"
+      className="h-44 w-[9.5rem] overflow-visible text-muted-foreground sm:h-52 sm:w-44 md:h-60 md:w-52"
+      animate={lost ? { x: [0, -5, 5, -3, 3, 0] } : won ? { y: [0, -5, 0] } : {}}
+      transition={{ duration: 0.5 }}
     >
-      <motion.g
+      <g fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 226h156" />
+        <path d="M50 226V22h102" />
+        <path d="M50 50h28" />
+      </g>
+      <path d="M152 22v30" fill="none" stroke={rope} strokeWidth="6" strokeLinecap="round" />
+      <g
         fill="none"
-        stroke="currentColor"
-        strokeWidth="6"
+        stroke={body}
+        strokeWidth="5.5"
         strokeLinecap="round"
         strokeLinejoin="round"
+        style={{ transformOrigin: "152px 22px" }}
       >
-        <path d="M28 236h164" className="text-muted-foreground" />
-        <path d="M56 236V28h108" className="text-muted-foreground" />
-        <path d="M56 56h36" className="text-muted-foreground" />
-        <motion.path
-          d="M164 28v28"
-          className={cn(lost ? "text-rose-400" : "text-teal-400")}
-          animate={lost ? { rotate: [0, 2, -2, 0] } : {}}
-          style={{ originX: "164px", originY: "28px" }}
-        />
-      </motion.g>
-
-      <motion.g
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-        animate={sway}
-        transition={{ duration: lost ? 1.4 : 1.1, repeat: lost || won ? Infinity : 0, ease: "easeInOut" }}
-        style={{ originX: "164px", originY: "28px" }}
-      >
-        {wrong >= 1 && (
-          <motion.circle
-            cx="164"
-            cy="78"
-            r="18"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 380, damping: 16 }}
-          />
-        )}
-        {wrong >= 2 && (
-          <motion.path
-            d="M164 96v52"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.35 }}
-          />
-        )}
-        {wrong >= 3 && (
-          <motion.path
-            d="M164 112l-28 22"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.3 }}
-          />
-        )}
-        {wrong >= 4 && (
-          <motion.path
-            d="M164 112l28 22"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.3 }}
-          />
-        )}
-        {wrong >= 5 && (
-          <motion.path
-            d="M164 148l-24 34"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.3 }}
-          />
-        )}
-        {wrong >= 6 && (
-          <motion.path
-            d="M164 148l24 34"
-            className={lost ? "stroke-rose-400" : won ? "stroke-emerald-400" : "stroke-amber-300"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.3 }}
-          />
-        )}
-        {won && wrong >= 1 && (
-          <motion.path
-            d="M156 74h16"
-            className="stroke-emerald-300"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          />
-        )}
-      </motion.g>
+        {wrong >= 1 && <circle cx="152" cy="70" r="16" />}
+        {wrong >= 2 && <path d="M152 86v48" />}
+        {wrong >= 3 && <path d="M152 104l-26 20" />}
+        {wrong >= 4 && <path d="M152 104l26 20" />}
+        {wrong >= 5 && <path d="M152 134l-22 32" />}
+        {wrong >= 6 && <path d="M152 134l22 32" />}
+        {won && wrong >= 1 && <path d="M144 66h16" stroke="var(--primary)" />}
+      </g>
     </motion.svg>
   );
 }
@@ -161,18 +138,88 @@ function Sparks({ tone }: { tone: "ok" | "bad" }) {
   );
 }
 
+type Reward = { id: number; points: number; stars: number; complete: boolean };
+
+function RewardBurst({ reward }: { reward: Reward }) {
+  return (
+    <motion.div
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="absolute left-1/2 top-[30%] flex -translate-x-1/2 flex-col items-center gap-1"
+        initial={{ opacity: 0, y: 16, scale: 0.7 }}
+        animate={{ opacity: [0, 1, 1, 0], y: -56, scale: [0.7, 1.18, 1] }}
+        transition={{ duration: reward.complete ? 1.15 : 0.85, ease: "easeOut" }}
+      >
+        <span className="rounded-sm border border-primary/30 bg-secondary px-2.5 py-1 font-mono text-lg font-bold text-secondary-foreground sm:text-xl">
+          +{reward.points}
+        </span>
+        {reward.complete && (
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Star earned</span>
+        )}
+      </motion.div>
+      {Array.from({ length: reward.stars }, (_, i) => {
+        const angle = (i / reward.stars) * Math.PI * 2 - Math.PI / 2;
+        return (
+          <motion.span
+            key={i}
+            className="absolute left-1/2 top-[34%] text-primary"
+            initial={{ opacity: 1, x: 0, y: 0, scale: 0.35, rotate: 0 }}
+            animate={{
+              opacity: 0,
+              x: Math.cos(angle) * (reward.complete ? 92 : 64),
+              y: Math.sin(angle) * (reward.complete ? 58 : 42) - 12,
+              scale: 1.25,
+              rotate: 200,
+            }}
+            transition={{ duration: reward.complete ? 1.05 : 0.75, ease: "easeOut" }}
+          >
+            <LuStar className="h-4 w-4 fill-primary" />
+          </motion.span>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+type RoundRef = {
+  word: string;
+  guessed: Set<string>;
+  wrong: number;
+  done: boolean;
+  points: number;
+};
+
+function makeRound(entry: Entry): RoundRef {
+  return { word: entry.word, guessed: new Set(), wrong: 0, done: false, points: 0 };
+}
+
 export default function BitayDemo() {
-  const [entry, setEntry] = useState<Entry>(BANK[0]);
-  const [guessed, setGuessed] = useState<Set<string>>(new Set());
+  const [category, setCategory] = useState<string>("All");
+  const [entry, setEntry] = useState<Entry>(() => pick());
+  const [guessed, setGuessed] = useState<Set<string>>(() => new Set());
   const [wrong, setWrong] = useState(0);
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [wins, setWins] = useState(0);
   const [flash, setFlash] = useState<"ok" | "bad" | null>(null);
   const [pop, setPop] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [muted, setMuted] = useState(false);
+  const [scorePulse, setScorePulse] = useState(0);
+  const [result, setResult] = useState<"win" | "lose" | null>(null);
+  const [roundPoints, setRoundPoints] = useState(0);
+  const [roundStars, setRoundStars] = useState(0);
+  const { reportProgress } = useArcadeScore();
+  const progressRef = useRef(reportProgress);
+  progressRef.current = reportProgress;
+  const roundRef = useRef<RoundRef>(makeRound(entry));
+  const scoreRef = useRef(0);
+  const rewardId = useRef(0);
 
   const letters = useMemo(() => entry.word.split(""), [entry.word]);
-  const revealed = letters.map((ch) => (guessed.has(ch) ? ch : ""));
   const won = letters.every((ch) => guessed.has(ch));
   const lost = wrong >= MAX_WRONG;
   const done = won || lost;
@@ -181,161 +228,294 @@ export default function BitayDemo() {
   useEffect(() => {
     const saved = localStorage.getItem("bitay-best");
     if (saved) setBest(parseInt(saved, 10) || 0);
+    const quiet = localStorage.getItem("bitay-mute") === "1";
+    setMuted(quiet);
+    setGameSfxMuted(quiet);
   }, []);
 
-  const nextRound = useCallback(() => {
-    setEntry((prev) => pick(prev.word));
+  const begin = useCallback((next: Entry, resetScore = false) => {
+    roundRef.current = makeRound(next);
+    setEntry(next);
     setGuessed(new Set());
     setWrong(0);
     setFlash(null);
     setPop(null);
-    if (lost) setScore(0);
-  }, [lost]);
+    setRewards([]);
+    setResult(null);
+    setRoundPoints(0);
+    setRoundStars(0);
+    if (resetScore) {
+      scoreRef.current = 0;
+      setScore(0);
+    }
+  }, []);
 
-  const guess = useCallback(
-    (raw: string) => {
-      const letter = raw.toUpperCase();
-      if (done || !/^[A-Z]$/.test(letter) || guessed.has(letter)) return;
-      const hit = letters.includes(letter);
-      setGuessed((prev) => new Set(prev).add(letter));
-      setPop(letter);
-      setFlash(hit ? "ok" : "bad");
-      window.setTimeout(() => {
-        setFlash(null);
-        setPop(null);
-      }, 520);
-
-      if (hit) {
-        const gained = 40 + letters.filter((ch) => ch === letter).length * 20;
-        const nextScore = score + gained;
-        const complete = letters.every((ch) => ch === letter || guessed.has(ch));
-        const total = complete ? nextScore + 180 : nextScore;
-        setScore(total);
-        if (complete) {
-          setWins((w) => w + 1);
-          setBest((prev) => {
-            const next = Math.max(prev, total);
-            localStorage.setItem("bitay-best", String(next));
-            return next;
-          });
-        }
-      } else {
-        setWrong((w) => w + 1);
-      }
+  const nextRound = useCallback(
+    (resetScore = false) => {
+      begin(pick(roundRef.current.word, category), resetScore);
     },
-    [done, guessed, letters, score]
+    [begin, category]
   );
+
+  function selectCategory(next: string) {
+    if (next === category) return;
+    setCategory(next);
+    begin(pick(roundRef.current.word, next));
+  }
+
+  const guess = useCallback((raw: string) => {
+    const letter = raw.toUpperCase();
+    if (!/^[A-Z]$/.test(letter)) return;
+    const round = roundRef.current;
+    if (round.done || round.guessed.has(letter)) return;
+
+    round.guessed.add(letter);
+    const hit = round.word.includes(letter);
+    if (!hit) round.wrong += 1;
+    const complete = [...round.word].every((ch) => round.guessed.has(ch));
+    const failed = round.wrong >= MAX_WRONG;
+    round.done = complete || failed;
+
+    setGuessed(new Set(round.guessed));
+    setWrong(round.wrong);
+    setPop(letter);
+    setFlash(hit ? "ok" : "bad");
+    window.setTimeout(() => {
+      setFlash(null);
+      setPop(null);
+    }, 520);
+
+    if (!hit) {
+      playGameSfx(failed ? "lose" : "miss");
+      progressRef.current(`Miss ${letter}`, scoreRef.current);
+      if (failed) setResult("lose");
+      return;
+    }
+
+    const gained = 40 + [...round.word].filter((ch) => ch === letter).length * 20;
+    const bonus = complete ? 180 : 0;
+    const stars = complete ? 1 + (MAX_WRONG - round.wrong) : 0;
+    round.points += gained + bonus;
+    const total = scoreRef.current + gained + bonus;
+    scoreRef.current = total;
+    setScore(total);
+    setRoundPoints(round.points);
+    setScorePulse((n) => n + 1);
+    const reward: Reward = {
+      id: ++rewardId.current,
+      points: gained + bonus,
+      stars: complete ? 10 : 5,
+      complete,
+    };
+    setRewards((prev) => [...prev.slice(-2), reward]);
+    window.setTimeout(() => {
+      setRewards((prev) => prev.filter((item) => item.id !== reward.id));
+    }, 1200);
+
+    playGameSfx("hit");
+    playGameSfx("star");
+    progressRef.current(complete ? `Solved ${round.word}` : `Letter ${letter}`, total);
+    if (!complete) return;
+    setRoundStars(stars);
+    setResult("win");
+    playGameSfx("win");
+    setWins((w) => w + 1);
+    setBest((prev) => {
+      const next = Math.max(prev, total);
+      localStorage.setItem("bitay-best", String(next));
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Enter" && done) {
-        nextRound();
+      if (e.key === "Enter" && roundRef.current.done) {
+        nextRound(roundRef.current.wrong >= MAX_WRONG);
         return;
       }
       guess(e.key);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [done, guess, nextRound]);
+  }, [guess, nextRound]);
 
   return (
-    <div className="relative flex flex-col items-center gap-4 overflow-hidden">
+    <div className="relative flex w-full flex-col gap-3 sm:gap-4">
       <AnimatePresence>{flash ? <Sparks tone={flash} /> : null}</AnimatePresence>
-      <GameHud>
-        <GameStat label="Score" value={score} accent />
+      <AnimatePresence>
+        {rewards.map((reward) => (
+          <RewardBurst key={reward.id} reward={reward} />
+        ))}
+      </AnimatePresence>
+      <GameHud className="w-full">
+        <motion.div key={scorePulse} initial={{ scale: 1 }} animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 0.35 }}>
+          <GameStat label="Score" value={score} accent />
+        </motion.div>
         <GameStat label="Best" value={best} />
         <GameStat label="Wins" value={wins} />
         <GameStat label="Misses" value={`${wrong}/${MAX_WRONG}`} />
-        <Button size="sm" variant="outline" className="rounded-sm" onClick={() => { setScore(0); nextRound(); }}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-sm"
+          aria-label={muted ? "Unmute sound" : "Mute sound"}
+          onClick={() => {
+            const next = !isGameSfxMuted();
+            setGameSfxMuted(next);
+            setMuted(next);
+            localStorage.setItem("bitay-mute", next ? "1" : "0");
+          }}
+        >
+          {muted ? <LuVolumeX className="h-4 w-4" /> : <LuVolume2 className="h-4 w-4" />}
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-sm" onClick={() => nextRound(true)}>
           New word
         </Button>
       </GameHud>
 
+      <div className="flex w-full gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+        {CATEGORIES.map((item) => {
+          const active = category === item;
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => selectCategory(item)}
+              className={cn(
+                "shrink-0 rounded-sm border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors sm:text-[11px]",
+                active
+                  ? "border-primary/50 bg-secondary text-secondary-foreground"
+                  : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              )}
+            >
+              {item}
+              <span className={cn("ml-1.5 tabular-nums", active ? "text-primary" : "text-muted-foreground")}>
+                {categoryCount(item)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="relative w-full overflow-hidden border border-border/60 bg-card/80">
       <motion.div
         className={cn(
-          "relative w-full max-w-lg border border-border/60 bg-card/80 p-4 sm:p-5",
+          "grid w-full gap-3 p-3 sm:gap-4 sm:p-4 md:grid-cols-[minmax(10rem,14rem)_1fr] md:items-start md:p-5",
           flash === "bad" && "ring-1 ring-rose-400/70",
           flash === "ok" && "ring-1 ring-emerald-400/70"
         )}
-        animate={flash === "bad" ? { x: [0, -10, 10, -6, 6, 0] } : flash === "ok" ? { scale: [1, 1.015, 1] } : {}}
+        animate={result ? {} : flash === "bad" ? { x: [0, -10, 10, -6, 6, 0] } : flash === "ok" ? { scale: [1, 1.015, 1] } : {}}
         transition={{ duration: 0.38 }}
       >
-        <p className="text-center font-mono text-[10px] uppercase tracking-[0.2em] text-teal-400">{entry.category}</p>
-        <div className="mt-2 flex justify-center">
-          <Gallows wrong={wrong} lost={lost} won={won} />
-        </div>
-        <p className="mt-1 text-center text-xs text-muted-foreground">Hint · {entry.hint}</p>
-
-        <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-          {letters.map((ch, i) => {
-            const show = Boolean(revealed[i]);
-            return (
-              <motion.span
-                key={`${entry.word}-${i}`}
-                className={cn(
-                  "flex h-11 w-8 items-center justify-center border font-mono text-lg font-semibold sm:h-12 sm:w-9 sm:text-xl",
-                  show
-                    ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-200"
-                    : "border-border/70 bg-background/50 text-muted-foreground/40"
-                )}
-                animate={show && pop === ch ? { y: [8, -6, 0], scale: [0.6, 1.15, 1] } : show ? { scale: 1 } : {}}
-                transition={{ type: "spring", stiffness: 420, damping: 18 }}
-              >
-                {show ? ch : ""}
-              </motion.span>
-            );
-          })}
+        <div className="flex flex-col items-center">
+          <span className="rounded-sm border border-primary/30 bg-secondary px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-secondary-foreground">
+            {entry.category}
+          </span>
+          <div className="mt-2 flex justify-center">
+            <Gallows wrong={wrong} lost={lost} won={won} />
+          </div>
+          <p className="mt-1 max-w-[16rem] text-center text-xs text-muted-foreground sm:text-sm">
+            Hint · {entry.hint}
+          </p>
         </div>
 
-        <AnimatePresence>
-          {done && (
-            <motion.div
-              className="mt-4 border border-border/50 bg-background/80 px-3 py-2 text-center"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              <p className={cn("text-sm font-semibold", won ? "text-emerald-400" : "text-rose-400")}>
-                {won ? "Saved — the rope never dropped." : `Bitay. The word was ${entry.word}.`}
-              </p>
-              <Button size="sm" className="mt-2 rounded-sm" onClick={nextRound}>
-                Next round
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      <div className="flex w-full max-w-lg flex-col items-center gap-1.5">
-        {ROWS.map((row) => (
-          <div key={row} className="flex justify-center gap-1">
-            {row.split("").map((letter) => {
-              const used = guessed.has(letter);
-              const good = used && letters.includes(letter);
-              const bad = used && !letters.includes(letter);
+        <div className="flex min-w-0 flex-col">
+          <div className="flex w-full flex-nowrap justify-center gap-1 md:justify-start">
+            {letters.map((ch, i) => {
+              const show = guessed.has(ch) || lost;
+              const missed = lost && !guessed.has(ch);
               return (
-                <motion.button
-                  key={letter}
-                  type="button"
-                  disabled={used || done}
-                  onClick={() => guess(letter)}
+                <motion.span
+                  key={`${entry.word}-${i}`}
                   className={cn(
-                    "h-9 w-7 rounded-sm border font-mono text-xs font-semibold sm:h-10 sm:w-8 sm:text-sm",
-                    !used && "border-border/60 bg-muted/30 hover:border-teal-400/50 hover:bg-teal-500/10",
-                    good && "border-emerald-400/60 bg-emerald-500/15 text-emerald-300",
-                    bad && "border-rose-400/50 bg-rose-500/15 text-rose-300 line-through opacity-70"
+                        "flex h-11 min-w-0 flex-1 items-center justify-center border font-mono text-base font-semibold sm:h-12 sm:max-w-[2.8rem] sm:text-lg md:text-xl",
+                    show && !missed && "border-primary/40 bg-secondary text-secondary-foreground",
+                    missed && "border-destructive/50 bg-destructive/10 text-destructive",
+                    !show && "border-border/70 bg-background/50 text-muted-foreground/40"
                   )}
-                  animate={pop === letter ? { scale: [1, 1.2, 1], y: good ? [-6, 0] : [4, 0] } : {}}
-                  whileTap={used ? undefined : { scale: 0.92 }}
+                  animate={show && pop === ch ? { y: [8, -6, 0], scale: [0.6, 1.15, 1] } : show ? { scale: 1 } : {}}
+                  transition={{ type: "spring", stiffness: 420, damping: 18 }}
                 >
-                  {letter}
-                </motion.button>
+                  {show ? ch : ""}
+                </motion.span>
               );
             })}
           </div>
-        ))}
+
+          <div className="mt-3 flex w-full flex-col items-stretch gap-1 sm:mt-4 sm:gap-1.5">
+            {ROWS.map((row) => (
+              <div key={row} className="flex justify-center gap-0.5 sm:gap-1">
+                {row.split("").map((letter) => {
+                  const used = guessed.has(letter);
+                  const good = used && letters.includes(letter);
+                  const bad = used && !letters.includes(letter);
+                  return (
+                    <motion.button
+                      key={letter}
+                      type="button"
+                      disabled={used || done}
+                      onClick={() => guess(letter)}
+                      className={cn(
+                        "h-11 min-w-0 flex-1 rounded-sm border font-mono text-xs font-semibold sm:h-12 sm:max-w-[2.8rem] sm:text-sm",
+                        !used && !done && "border-border bg-muted/40 text-foreground hover:border-primary/40 hover:bg-secondary",
+                        !used && done && "border-border/40 bg-muted/10 opacity-40",
+                        good && "border-primary/40 bg-secondary text-secondary-foreground",
+                        bad && "border-destructive/40 bg-destructive/10 text-destructive line-through opacity-70"
+                      )}
+                      animate={pop === letter ? { scale: [1, 1.2, 1], y: good ? [-6, 0] : [4, 0] } : {}}
+                      whileTap={used || done ? undefined : { scale: 0.92 }}
+                    >
+                      {letter}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </motion.div>
+        {result && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-card/95 p-5 text-center text-card-foreground backdrop-blur-sm">
+              {result === "lose" ? (
+                <>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-destructive">The rope dropped</p>
+                  <h3 className="mt-2 text-2xl font-bold tracking-tight text-destructive sm:text-3xl">You are now in BITAY</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    The word was{" "}
+                    <span className="font-mono font-semibold tracking-[0.14em] text-foreground">{entry.word}</span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
+                    <LuStar className="h-3.5 w-3.5 fill-primary" />
+                    {roundStars} {roundStars === 1 ? "star" : "stars"} earned
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold tracking-tight text-primary sm:text-3xl">Saved from BITAY</h3>
+                  <div className="mt-3 flex flex-col items-center gap-2">
+                    <span className="rounded-sm border border-primary/30 bg-secondary px-3 py-1 font-mono text-xl font-bold text-secondary-foreground">
+                      +{roundPoints}
+                    </span>
+                    <span className="flex items-center gap-1 text-primary">
+                      {Array.from({ length: roundStars }, (_, i) => (
+                        <LuStar key={i} className="h-4 w-4 fill-primary" />
+                      ))}
+                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      The word was{" "}
+                      <span className="font-mono font-semibold tracking-[0.14em] text-foreground">{entry.word}</span>
+                    </p>
+                  </div>
+                </>
+              )}
+              <Button size="sm" className="mt-5 rounded-sm" onClick={() => nextRound(result === "lose")}>
+                Next round
+              </Button>
+            </div>
+          )}
       </div>
-      <GameTip>Type or tap a letter · green pop on hits · red shake draws the gallows</GameTip>
+      <GameTip>Correct letters earn points and stars · mute in the HUD · type or tap a letter</GameTip>
     </div>
   );
 }

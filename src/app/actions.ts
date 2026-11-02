@@ -524,9 +524,29 @@ export async function settingsAction(formData: FormData) {
     showOnGameLeaderboard: formData.has("gameRankingPrivacy")
       ? formData.get("showOnGameLeaderboard") === "on"
       : Boolean(preferences?.showOnGameLeaderboard),
+    showGameStats: formData.has("privacyControls") ? formData.get("showGameStats") === "on" : Boolean(preferences?.showGameStats),
+    showGameAchievements: formData.has("privacyControls") ? formData.get("showGameAchievements") === "on" : Boolean(preferences?.showGameAchievements),
+    allowGameChallenges: formData.has("privacyControls") ? formData.get("allowGameChallenges") === "on" : preferences?.allowGameChallenges !== false,
+    showOnlineStatus: formData.has("privacyControls") ? formData.get("showOnlineStatus") === "on" : preferences?.showOnlineStatus !== false,
+    showActivityStatus: formData.has("privacyControls") ? formData.get("showActivityStatus") === "on" : preferences?.showActivityStatus !== false,
   };
-  if (preferences) await repo.update("userPreferences", user.profile.id, nextPreferences);
-  else await repo.insert("userPreferences", nextPreferences);
+  try {
+    if (preferences) await repo.update("userPreferences", user.profile.id, nextPreferences);
+    else await repo.insert("userPreferences", nextPreferences);
+  } catch (saveError) {
+    const message = saveError instanceof Error ? saveError.message : String(saveError);
+    if (!/show_game_stats|show_game_achievements|allow_game_challenges|show_online_status|show_activity_status|schema cache/i.test(message)) throw saveError;
+    const {
+      showGameStats: _showGameStats,
+      showGameAchievements: _showGameAchievements,
+      allowGameChallenges: _allowGameChallenges,
+      showOnlineStatus: _showOnlineStatus,
+      showActivityStatus: _showActivityStatus,
+      ...legacyPreferences
+    } = nextPreferences;
+    if (preferences) await repo.update("userPreferences", user.profile.id, legacyPreferences);
+    else await repo.insert("userPreferences", legacyPreferences);
+  }
   const store = await cookies();
   store.set("theme", theme, { path: "/", maxAge: 60 * 60 * 24 * 365 });
   store.set("locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });

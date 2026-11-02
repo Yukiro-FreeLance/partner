@@ -29,7 +29,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   const handle = user.profile.email.split("@")[0];
   return (
     <main className="w-full">
-      <section className="bg-white shadow-[var(--shadow)]">
+      <section className="bg-card text-card-foreground shadow-[var(--shadow)]">
         <BannerUpload src={user.profile.bannerUrl} control="top" className="h-56 w-full sm:h-72 lg:h-[22.5rem]" />
         <div className="px-4 sm:px-8 lg:px-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
@@ -46,9 +46,9 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         </div>
       </section>
       <div className="grid w-full items-start gap-6 px-4 py-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:px-8">
-        {saved === "1" && <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 lg:col-span-2" role="status">Profile saved.</p>}
+        {saved === "1" && <p className="rounded-2xl bg-secondary px-4 py-3 text-sm text-secondary-foreground lg:col-span-2" role="status">Profile saved.</p>}
         {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive lg:col-span-2" role="alert">{error}</p>}
-        <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-white p-6 shadow-[var(--shadow)]">
+        <form action={settingsAction} className="grid h-fit gap-4 rounded-[1.75rem] bg-card p-6 text-card-foreground shadow-[var(--shadow)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-serif text-2xl">Profile settings</h2>
             <Link href="/settings" className="flex size-11 items-center justify-center rounded-full bg-secondary" aria-label="Account settings"><Settings className="size-5" /></Link>
@@ -66,11 +66,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm">Theme
-              <select name="theme" defaultValue={user.preferences.theme} className="h-11 rounded-2xl border bg-card px-3"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
+              <select name="theme" defaultValue={user.preferences.theme} className="h-11 rounded-2xl border border-border bg-background px-3 text-foreground"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
               <p className="text-xs leading-5 text-muted-foreground">Light, dark, or follow this device.</p>
             </label>
             <label className="grid gap-2 text-sm">Language
-              <select name="locale" defaultValue={user.preferences.locale} className="h-11 rounded-2xl border bg-card px-3"><option value="en">English</option><option value="fil">Filipino</option></select>
+              <select name="locale" defaultValue={user.preferences.locale} className="h-11 rounded-2xl border border-border bg-background px-3 text-foreground"><option value="en">English</option><option value="fil">Filipino</option></select>
               <p className="text-xs leading-5 text-muted-foreground">Your menus only. Your partner can choose separately.</p>
             </label>
           </div>
@@ -82,31 +82,31 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           <Button type="submit">Save profile</Button>
         </form>
         <div className="grid h-fit gap-4">
-          <nav className="overflow-hidden rounded-[1.75rem] bg-white shadow-[var(--shadow)]">
+          <nav className="overflow-hidden rounded-[1.75rem] bg-card text-card-foreground shadow-[var(--shadow)]">
             {rows.map(([href, label, Icon]) => (
-              <Link key={label} href={href} className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm last:border-b-0">
-                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Icon className="size-4" aria-hidden /></span>
+              <Link key={label} href={href} className="flex min-h-14 items-center gap-3 border-b border-border px-4 text-sm last:border-b-0">
+                <span className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"><Icon className="size-4" aria-hidden /></span>
                 <span className="flex-1">{label}</span>
                 <span aria-hidden className="text-muted-foreground">›</span>
               </Link>
             ))}
             {(user.profile.role === "admin" || user.profile.role === "super_admin") && (
-              <Link href="/admin" className="flex min-h-14 items-center gap-3 border-b border-[#f6eef8] px-4 text-sm">
-                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Lock className="size-4" aria-hidden /></span>
+              <Link href="/admin" className="flex min-h-14 items-center gap-3 border-b border-border px-4 text-sm">
+                <span className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"><Lock className="size-4" aria-hidden /></span>
                 <span className="flex-1">Question administration</span>
                 <span aria-hidden className="text-muted-foreground">›</span>
               </Link>
             )}
             {user.profile.role === "super_admin" && (
               <Link href="/admin/users" className="flex min-h-14 items-center gap-3 px-4 text-sm">
-                <span className="flex size-9 items-center justify-center rounded-full bg-[#f7e8ff] text-primary"><Users className="size-4" aria-hidden /></span>
+                <span className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"><Users className="size-4" aria-hidden /></span>
                 <span className="flex-1">User list</span>
                 <span aria-hidden className="text-muted-foreground">›</span>
               </Link>
             )}
           </nav>
           <form action={logoutAction}>
-            <button className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[1.75rem] bg-[#fff1f2] text-sm font-medium text-rose">
+            <button className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[1.75rem] bg-accent text-sm font-medium text-accent-foreground">
               <LogOut className="size-4" aria-hidden /> Log out
             </button>
           </form>

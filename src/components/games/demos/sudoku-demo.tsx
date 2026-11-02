@@ -163,7 +163,7 @@ export default function SudokuDemo() {
         </p>
       )}
 
-      <div className="grid grid-cols-9 gap-0.5 rounded-xl border border-border/60 bg-border/40 p-1">
+      <div className="grid w-full max-w-[36rem] grid-cols-9 gap-0.5 rounded-2xl border border-border/60 bg-border/40 p-1.5 sm:gap-1 sm:p-2">
         {grid.map((row, r) =>
           row.map((val, c) => {
             const isFixed = fixed.has(`${r}-${c}`);
@@ -177,7 +177,7 @@ export default function SudokuDemo() {
                 type="button"
                 onClick={() => setSelected([r, c])}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center text-sm font-medium md:h-9 md:w-9",
+                  "flex aspect-square min-h-8 min-w-0 items-center justify-center text-base font-medium sm:text-lg md:text-xl",
                   "bg-card/90 hover:bg-primary/10",
                   isFixed && "font-bold text-foreground",
                   !isFixed && "text-primary",
@@ -197,7 +197,7 @@ export default function SudokuDemo() {
 
       <div className="flex flex-wrap justify-center gap-1.5">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-          <Button key={n} size="sm" variant="secondary" className="h-9 w-9 p-0" onClick={() => place(n)}>
+         <Button key={n} size="sm" variant="secondary" className="h-11 w-11 p-0 text-base sm:h-12 sm:w-12" onClick={() => place(n)}>
             {n}
           </Button>
         ))}

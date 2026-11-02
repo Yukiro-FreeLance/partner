@@ -6,21 +6,19 @@ import { useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip } from "@/components/games/game-ui";
 
 const W = 480;
-const H = 440;
+const H = 500;
 const WALL = 16;
 const COLS = 23;
 const ROWS = 16;
 const CELL = 16;
 const FIELD_X = (W - COLS * CELL) / 2;
 const FIELD_Y = WALL + 16;
-const CUT_ROWS = 3;
-const GATE_COLS = 5;
-const GATE_LEFT_COL = Math.floor((COLS - GATE_COLS) / 2);
-const GATE_RIGHT_COL = GATE_LEFT_COL + GATE_COLS;
-const BALL_R = 6;
+const DOOR_DOWN = 2;
+const FIELD_BOTTOM = FIELD_Y + ROWS * CELL;
+const BALL_R = 5;
 const PADDLE_H = 12;
 const PADDLE_Y = H - 42;
-const MAX_BALL_SPEED = 9.2;
+const MAX_BALL_SPEED = 10.6;
 const MAX_BALLS = 28;
 const PURPLE = ["#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6"];
 const YELLOW = "#f5c518";
@@ -35,7 +33,10 @@ type Brick = {
   color: string;
   alive: boolean;
   steel: boolean;
+  bumper: boolean;
 };
+type VoidCell = { c: number; r: number };
+type LevelLayout = { bricks: Brick[]; voids: VoidCell[]; mouthCol: number };
 type Ball = { x: number; y: number; vx: number; vy: number; glued: boolean };
 type Shard = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 type Drop = { x: number; y: number; kind: "add" | "mul"; value: number };
@@ -43,6 +44,10 @@ type Floater = { x: number; y: number; text: string; life: number; color: string
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
+}
+
+function boxOf(brick: Brick) {
+  return { x: brick.x, y: brick.y, w: CELL, h: CELL };
 }
 
 function circleRect(cx: number, cy: number, r: number, b: { x: number; y: number; w: number; h: number }) {
@@ -53,46 +58,216 @@ function circleRect(cx: number, cy: number, r: number, b: { x: number; y: number
   return dx * dx + dy * dy <= r * r;
 }
 
-function isGate(c: number, r: number) {
-  return r >= ROWS - CUT_ROWS && c >= GATE_LEFT_COL && c < GATE_RIGHT_COL;
+function penetration(cx: number, cy: number, r: number, b: { x: number; y: number; w: number; h: number }) {
+  const nx = clamp(cx, b.x, b.x + b.w);
+  const ny = clamp(cy, b.y, b.y + b.h);
+  const dx = cx - nx;
+  const dy = cy - ny;
+  const d2 = dx * dx + dy * dy;
+  if (d2 > r * r) return -1;
+  if (d2 < 1e-8) {
+    const inset = Math.min(cx - b.x, b.x + b.w - cx, cy - b.y, b.y + b.h - cy);
+    return r + Math.max(0, inset);
+  }
+  return r - Math.sqrt(d2);
 }
 
-function makeLevel(level: number): Brick[] {
-  const filled: boolean[][] = Array.from({ length: ROWS }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => !isGate(c, r))
-  );
+function resolveCircleAabb(ball: Ball, box: { x: number; y: number; w: number; h: number }) {
+  const closestX = clamp(ball.x, box.x, box.x + box.w);
+  const closestY = clamp(ball.y, box.y, box.y + box.h);
+  const dx = ball.x - closestX;
+  const dy = ball.y - closestY;
+  const d2 = dx * dx + dy * dy;
+  let ux = 0;
+  let uy = 0;
+
+  if (d2 < 1e-8) {
+    const left = ball.x - box.x;
+    const right = box.x + box.w - ball.x;
+    const top = ball.y - box.y;
+    const bottom = box.y + box.h - ball.y;
+    const min = Math.min(left, right, top, bottom);
+    if (min === left) {
+      ux = -1;
+      ball.x = box.x - BALL_R;
+    } else if (min === right) {
+      ux = 1;
+      ball.x = box.x + box.w + BALL_R;
+    } else if (min === top) {
+      uy = -1;
+      ball.y = box.y - BALL_R;
+    } else {
+      uy = 1;
+      ball.y = box.y + box.h + BALL_R;
+    }
+  } else if (Math.abs(dx) > Math.abs(dy)) {
+    ux = Math.sign(dx) || 1;
+    ball.x = closestX + ux * BALL_R;
+  } else {
+    uy = Math.sign(dy) || 1;
+    ball.y = closestY + uy * BALL_R;
+  }
+
+  const vn = ball.vx * ux + ball.vy * uy;
+  if (vn < 0) {
+    ball.vx -= 2 * vn * ux;
+    ball.vy -= 2 * vn * uy;
+  }
+}
+
+function separateFromBox(ball: Ball, box: { x: number; y: number; w: number; h: number }) {
+  const closestX = clamp(ball.x, box.x, box.x + box.w);
+  const closestY = clamp(ball.y, box.y, box.y + box.h);
+  const dx = ball.x - closestX;
+  const dy = ball.y - closestY;
+  const d2 = dx * dx + dy * dy;
+  if (d2 > BALL_R * BALL_R && d2 > 1e-8) return;
+  if (d2 < 1e-8) {
+    const left = ball.x - box.x;
+    const right = box.x + box.w - ball.x;
+    const top = ball.y - box.y;
+    const bottom = box.y + box.h - ball.y;
+    const min = Math.min(left, right, top, bottom);
+    if (min === left) ball.x = box.x - BALL_R;
+    else if (min === right) ball.x = box.x + box.w + BALL_R;
+    else if (min === top) ball.y = box.y - BALL_R;
+    else ball.y = box.y + box.h + BALL_R;
+    return;
+  }
+  const d = Math.sqrt(d2);
+  ball.x = closestX + (dx / d) * BALL_R;
+  ball.y = closestY + (dy / d) * BALL_R;
+}
+
+function stabilizeBall(ball: Ball) {
+  if (Math.abs(ball.vy) < 0.95) ball.vy = 0.95 * Math.sign(ball.vy || -1);
+  if (Math.abs(ball.vx) < 0.5) ball.vx = 0.5 * Math.sign(ball.vx || 1);
+  const speed = Math.hypot(ball.vx, ball.vy) || 4;
+  const target = clamp(speed, 3.6, MAX_BALL_SPEED);
+  ball.vx *= target / speed;
+  ball.vy *= target / speed;
+}
+
+function cellKey(c: number, r: number) {
+  return `${c},${r}`;
+}
+
+function cellBrick(c: number, r: number, steel: boolean, hp: number, color: string, bumper = false): Brick {
+  return {
+    x: FIELD_X + c * CELL,
+    y: FIELD_Y + r * CELL,
+    w: CELL - 1,
+    h: CELL - 1,
+    hp,
+    max: hp,
+    color,
+    alive: true,
+    steel,
+    bumper,
+  };
+}
+
+function carveMaze(level: number) {
+  const carved = new Set<string>();
+  const mouthCol = clamp(6 + ((level * 5) % 11), 4, COLS - 5);
+  let c = mouthCol;
+  let r = ROWS - 1;
+  const mark = (cc: number, rr: number) => {
+    if (cc >= 2 && cc <= COLS - 3 && rr >= 3 && rr < ROWS) carved.add(cellKey(cc, rr));
+  };
+  mark(c, r);
+
+  const dir = level % 2 === 0 ? -1 : 1;
+  const runs = [
+    { dc: 0, dr: -1, n: 2 },
+    { dc: dir, dr: 0, n: 5 },
+    { dc: 0, dr: -1, n: 2 },
+    { dc: -dir, dr: 0, n: 9 },
+    { dc: 0, dr: -1, n: 2 },
+    { dc: dir, dr: 0, n: 4 },
+    { dc: 0, dr: -1, n: 1 },
+  ];
+  for (const run of runs) {
+    for (let i = 0; i < run.n; i++) {
+      const nc = clamp(c + run.dc, 2, COLS - 3);
+      const nr = clamp(r + run.dr, 4, ROWS - 1);
+      if (nc === c && nr === r) continue;
+      c = nc;
+      r = nr;
+      mark(c, r);
+    }
+  }
+
+  const alcoveTop = clamp(r - 1, 3, ROWS - 3);
+  for (let dc = -1; dc <= 1; dc++) {
+    for (let dr = 0; dr <= 1; dr++) {
+      mark(clamp(c + dc, 2, COLS - 3), clamp(alcoveTop + dr, 3, ROWS - 2));
+    }
+  }
+
+  return { carved, mouthCol, alcoveTop };
+}
+
+function isBaffle(c: number, r: number, level: number, carved: Set<string>) {
+  if (carved.has(cellKey(c, r)) || c === 0 || c === COLS - 1) return false;
+  if (r === 3) {
+    const gap = 3 + ((level * 4) % (COLS - 7));
+    return c !== gap;
+  }
+  if (r === 6 && level >= 2) {
+    const gap = COLS - 4 - ((level * 3) % (COLS - 7));
+    return c !== gap;
+  }
+  return false;
+}
+
+function makeLevel(level: number): LevelLayout {
+  const { carved, mouthCol, alcoveTop } = carveMaze(level);
   const bricks: Brick[] = [];
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (!filled[r][c]) continue;
-      const edge =
-        r === 0 ||
-        c === 0 ||
-        c === COLS - 1 ||
-        (r === ROWS - 1 && !isGate(c, r)) ||
-        (filled[r][c] &&
-          [
-            [r - 1, c],
-            [r + 1, c],
-            [r, c - 1],
-            [r, c + 1],
-          ].some(([rr, cc]) => rr < 0 || cc < 0 || rr >= ROWS || cc >= COLS || !filled[rr][cc]));
-      const hp = edge ? 99 : 1 + (level > 1 && (r + c + level) % 7 === 0 ? 1 : 0) + (level > 3 && (r * 3 + c) % 11 === 0 ? 1 : 0);
-      bricks.push({
-        x: FIELD_X + c * CELL,
-        y: FIELD_Y + r * CELL,
-        w: CELL - 1,
-        h: CELL - 1,
-        hp,
-        max: hp,
-        color: edge ? YELLOW : PURPLE[(hp - 1 + level) % PURPLE.length],
-        alive: true,
-        steel: edge,
-      });
+      if (carved.has(cellKey(c, r))) continue;
+      const outer = r === 0 || c === 0 || c === COLS - 1 || r === ROWS - 1;
+      const nextToPath = [
+        [r - 1, c],
+        [r + 1, c],
+        [r, c - 1],
+        [r, c + 1],
+      ].some(([rr, cc]) => carved.has(cellKey(cc, rr)));
+      const alcoveCeiling = r === alcoveTop - 1 && carved.has(cellKey(c, r + 1));
+      const baffle = isBaffle(c, r, level, carved);
+      const bumper = !outer && ((c === 4 && r === 2) || (c === COLS - 5 && r === 2) || (level >= 3 && c === 11 && r === 5));
+      const steel = outer || bumper || (!alcoveCeiling && (baffle || nextToPath));
+      const hp = steel
+        ? 99
+        : 1 +
+          ((c + r + level) % 3 === 0 ? 1 : 0) +
+          (level >= 2 && (c * 3 + r) % 5 === 0 ? 1 : 0) +
+          (level >= 4 ? 1 : 0);
+      bricks.push(
+        cellBrick(
+          c,
+          r,
+          steel,
+          hp,
+          bumper ? "#f59e0b" : steel ? YELLOW : PURPLE[(hp - 1) % PURPLE.length],
+          bumper
+        )
+      );
     }
   }
-  return bricks;
+
+  for (let step = 0; step < DOOR_DOWN; step++) {
+    bricks.push(cellBrick(mouthCol - 1, ROWS + step, true, 99, YELLOW));
+    bricks.push(cellBrick(mouthCol + 1, ROWS + step, true, 99, YELLOW));
+  }
+
+  const voids = [...carved].map((item) => {
+    const [c, r] = item.split(",").map(Number);
+    return { c, r };
+  });
+  return { bricks, voids, mouthCol };
 }
 
 function dropForLevel(level: number): Pick<Drop, "kind" | "value"> {
@@ -114,12 +289,14 @@ export default function BrickBreakDemo() {
   useReportWhen(status === "over", score);
 
   const paddleX = useRef(W / 2);
-  const paddleW = useRef(70);
+  const paddleW = useRef(64);
   const balls = useRef<Ball[]>([]);
   const bricks = useRef<Brick[]>([]);
   const shards = useRef<Shard[]>([]);
   const drops = useRef<Drop[]>([]);
   const floaters = useRef<Floater[]>([]);
+  const voids = useRef<VoidCell[]>([]);
+  const mouthCol = useRef(11);
   const keys = useRef({ left: false, right: false });
   const bank = useRef(0);
   const scoreRef = useRef(0);
@@ -142,7 +319,7 @@ export default function BrickBreakDemo() {
   }, []);
 
   const makeBall = useCallback((glued: boolean, spread = 0): Ball => {
-    const speed = 4.4 + Math.min(2.6, (levelRef.current - 1) * 0.32);
+    const speed = 5.2 + Math.min(3.4, (levelRef.current - 1) * 0.48);
     const angle = -Math.PI / 2 + spread;
     return {
       x: paddleX.current,
@@ -157,15 +334,19 @@ export default function BrickBreakDemo() {
     (nextLevel: number, keepScore = true) => {
       levelRef.current = nextLevel;
       setLevel(nextLevel);
-      bricks.current = makeLevel(nextLevel);
+      const layout = makeLevel(nextLevel);
+      bricks.current = layout.bricks;
+      voids.current = layout.voids;
+      mouthCol.current = layout.mouthCol;
+      const mouthX = FIELD_X + layout.mouthCol * CELL + CELL / 2;
       drops.current = [
-        { x: W / 2 - 18, y: FIELD_Y + (ROWS - CUT_ROWS) * CELL + 10, kind: "add", value: 2 },
-        { x: W / 2 + 18, y: FIELD_Y + (ROWS - CUT_ROWS) * CELL + 36, kind: "mul", value: 2 },
+        { x: mouthX, y: FIELD_BOTTOM - CELL * 2, kind: "add", value: 1 },
+        { x: mouthX, y: FIELD_BOTTOM + 6, kind: "mul", value: 2 },
       ];
       shards.current = [];
       floaters.current = [];
-      paddleW.current = 96;
-      paddleX.current = W / 2;
+      paddleW.current = Math.max(48, 66 - (nextLevel - 1) * 5);
+      paddleX.current = mouthX;
       const queued = keepScore ? Math.max(1, 1 + bank.current) : 1;
       if (!keepScore) {
         bank.current = 0;
@@ -196,7 +377,7 @@ export default function BrickBreakDemo() {
     const glued = balls.current.filter((ball) => ball.glued);
     glued.forEach((ball, index) => {
       ball.glued = false;
-      const speed = 4.6 + Math.min(2.6, (levelRef.current - 1) * 0.32);
+      const speed = 5.4 + Math.min(3.4, (levelRef.current - 1) * 0.48);
       const spread = (index - (glued.length - 1) / 2) * 0.12;
       ball.vx = Math.sin(spread) * speed;
       ball.vy = -Math.cos(spread) * speed;
@@ -303,7 +484,7 @@ export default function BrickBreakDemo() {
     };
 
     const tick = (now: number) => {
-      const dt = Math.min(32, now - (last.current || now)) / 16.67;
+      const dt = Math.min(1.55, (now - (last.current || now)) / 16.67);
       last.current = now;
 
       ctx.fillStyle = "#07060a";
@@ -314,8 +495,15 @@ export default function BrickBreakDemo() {
       ctx.fillRect(0, 0, WALL, H);
       ctx.fillRect(W - WALL, 0, WALL, H);
 
+      ctx.fillStyle = "#000000";
+      for (const hole of voids.current) {
+        ctx.fillRect(FIELD_X + hole.c * CELL, FIELD_Y + hole.r * CELL, CELL, CELL);
+      }
+      const mouthLeft = FIELD_X + mouthCol.current * CELL;
+      ctx.fillRect(mouthLeft, FIELD_BOTTOM, CELL, DOOR_DOWN * CELL);
+
       if (keys.current.left) paddleX.current -= 8.4 * dt;
-      if (keys.current.right) paddleX.current += 6.4 * dt;
+      if (keys.current.right) paddleX.current += 8.4 * dt;
       paddleX.current = clamp(paddleX.current, paddleMin(), paddleMax());
 
       const playing = statusRef.current === "play";
@@ -339,66 +527,101 @@ export default function BrickBreakDemo() {
           return false;
         });
 
+        const hitBrick = (ball: Ball, brick: Brick) => {
+          if (brick.bumper) {
+            const speed = Math.min(MAX_BALL_SPEED, Math.hypot(ball.vx, ball.vy) * 1.18 || 6);
+            const angle = Math.atan2(ball.vy, ball.vx);
+            ball.vx = Math.cos(angle) * speed;
+            ball.vy = Math.sin(angle) * speed;
+            burst(brick.x + brick.w / 2, brick.y + brick.h / 2, "#fbbf24");
+            return;
+          }
+          if (brick.steel) return;
+          brick.hp -= 1;
+          if (brick.hp <= 0) {
+            brick.alive = false;
+            scoreRef.current += 40 * levelRef.current;
+            setScore(scoreRef.current);
+            burst(brick.x + brick.w / 2, brick.y + brick.h / 2, brick.color);
+            if (Math.random() < 0.16) {
+              drops.current.push({
+                x: brick.x + brick.w / 2,
+                y: brick.y,
+                ...dropForLevel(levelRef.current),
+              });
+            }
+          } else {
+            brick.color = PURPLE[Math.min(PURPLE.length - 1, brick.hp - 1)];
+          }
+        };
+
+        const bounceWorld = (ball: Ball) => {
+          if (ball.x < WALL + BALL_R) {
+            ball.x = WALL + BALL_R;
+            if (ball.vx < 0) ball.vx *= -1;
+          } else if (ball.x > W - WALL - BALL_R) {
+            ball.x = W - WALL - BALL_R;
+            if (ball.vx > 0) ball.vx *= -1;
+          }
+          if (ball.y < WALL + BALL_R) {
+            ball.y = WALL + BALL_R;
+            if (ball.vy < 0) ball.vy *= -1;
+          }
+        };
+
+        const bouncePaddle = (ball: Ball) => {
+          if (ball.vy <= 0) return;
+          if (ball.y + BALL_R < PADDLE_Y || ball.y - BALL_R > PADDLE_Y + PADDLE_H) return;
+          if (Math.abs(ball.x - paddleX.current) > paddleW.current / 2 + BALL_R) return;
+          const hit = clamp((ball.x - paddleX.current) / (paddleW.current / 2), -1, 1);
+          const angle = hit * 1.05;
+          const speed = Math.min(MAX_BALL_SPEED, Math.max(3.8, Math.hypot(ball.vx, ball.vy) * 1.01));
+          ball.vx = speed * Math.sin(angle);
+          ball.vy = -Math.abs(speed * Math.cos(angle));
+          ball.y = PADDLE_Y - BALL_R - 0.5;
+          stabilizeBall(ball);
+        };
+
+        const bounceBricks = (ball: Ball, touched: Set<Brick>) => {
+          let best: Brick | null = null;
+          let bestPen = -1;
+          for (const brick of bricks.current) {
+            if (!brick.alive) continue;
+            const pen = penetration(ball.x, ball.y, BALL_R, boxOf(brick));
+            if (pen > bestPen) {
+              bestPen = pen;
+              best = brick;
+            }
+          }
+          if (!best || bestPen < 0) return;
+          resolveCircleAabb(ball, boxOf(best));
+          if (!touched.has(best)) {
+            touched.add(best);
+            hitBrick(ball, best);
+          }
+          for (const brick of bricks.current) {
+            if (!brick.alive || brick === best) continue;
+            if (circleRect(ball.x, ball.y, BALL_R, boxOf(brick))) separateFromBox(ball, boxOf(brick));
+          }
+          stabilizeBall(ball);
+        };
+
         for (const ball of balls.current) {
           if (ball.glued) {
             ball.x = paddleX.current;
             ball.y = PADDLE_Y - BALL_R - 3;
             continue;
           }
-          ball.x += ball.vx * dt;
-          ball.y += ball.vy * dt;
-
-          if (ball.x < WALL + BALL_R) {
-            ball.x = WALL + BALL_R;
-            ball.vx *= -1;
-          }
-          if (ball.x > W - WALL - BALL_R) {
-            ball.x = W - WALL - BALL_R;
-            ball.vx *= -1;
-          }
-          if (ball.y < WALL + BALL_R) {
-            ball.y = WALL + BALL_R;
-            ball.vy *= -1;
-          }
-          if (
-            ball.vy > 0 &&
-            ball.y + BALL_R >= PADDLE_Y &&
-            ball.y + BALL_R <= PADDLE_Y + PADDLE_H + 8 &&
-            Math.abs(ball.x - paddleX.current) <= paddleW.current / 2 + BALL_R
-          ) {
-            const hit = (ball.x - paddleX.current) / (paddleW.current / 2);
-            const angle = hit * 1.05;
-            const speed = Math.min(MAX_BALL_SPEED, Math.hypot(ball.vx, ball.vy) * 1.015);
-            ball.vx = speed * Math.sin(angle);
-            ball.vy = -Math.abs(speed * Math.cos(angle));
-            ball.y = PADDLE_Y - BALL_R - 1;
-          }
-
-          for (const brick of bricks.current) {
-            if (!brick.alive || !circleRect(ball.x, ball.y, BALL_R, brick)) continue;
-            const overlapX = Math.min(ball.x + BALL_R - brick.x, brick.x + brick.w - (ball.x - BALL_R));
-            const overlapY = Math.min(ball.y + BALL_R - brick.y, brick.y + brick.h - (ball.y - BALL_R));
-            if (overlapX < overlapY) ball.vx *= -1;
-            else ball.vy *= -1;
-            if (!brick.steel) {
-              brick.hp -= 1;
-              if (brick.hp <= 0) {
-                brick.alive = false;
-                scoreRef.current += 40 * levelRef.current;
-                setScore(scoreRef.current);
-                burst(brick.x + brick.w / 2, brick.y + brick.h / 2, brick.color);
-                if (Math.random() < 0.2) {
-                  drops.current.push({
-                    x: brick.x + brick.w / 2,
-                    y: brick.y,
-                    ...dropForLevel(levelRef.current),
-                  });
-                }
-              } else {
-                brick.color = PURPLE[Math.min(PURPLE.length - 1, brick.hp - 1)];
-              }
-            }
-            break;
+          const travel = Math.hypot(ball.vx, ball.vy) * dt;
+          const steps = Math.max(1, Math.ceil(travel / 3.2));
+          const stepDt = dt / steps;
+          const touched = new Set<Brick>();
+          for (let step = 0; step < steps; step++) {
+            ball.x += ball.vx * stepDt;
+            ball.y += ball.vy * stepDt;
+            bounceWorld(ball);
+            bouncePaddle(ball);
+            bounceBricks(ball, touched);
           }
         }
 
@@ -457,7 +680,16 @@ export default function BrickBreakDemo() {
         ctx.fillRect(brick.x, brick.y, brick.w, brick.h);
         ctx.strokeStyle = brick.steel ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.22)";
         ctx.strokeRect(brick.x + 0.5, brick.y + 0.5, brick.w - 1, brick.h - 1);
-        if (!brick.steel && brick.hp > 1) {
+        if (brick.bumper) {
+          ctx.strokeStyle = "rgba(255,255,255,0.55)";
+          ctx.beginPath();
+          ctx.moveTo(brick.x + brick.w / 2, brick.y + 3);
+          ctx.lineTo(brick.x + brick.w - 3, brick.y + brick.h / 2);
+          ctx.lineTo(brick.x + brick.w / 2, brick.y + brick.h - 3);
+          ctx.lineTo(brick.x + 3, brick.y + brick.h / 2);
+          ctx.closePath();
+          ctx.stroke();
+        } else if (!brick.steel && brick.hp > 1) {
           ctx.fillStyle = "rgba(255,255,255,0.9)";
           ctx.font = "bold 9px ui-monospace, monospace";
           ctx.textAlign = "center";
@@ -527,7 +759,7 @@ export default function BrickBreakDemo() {
         ctx.font = "13px ui-sans-serif, system-ui";
         ctx.fillStyle = "#fde68a";
         ctx.fillText(
-          statusRef.current === "clear" ? "Launching next chamber" : "Catch +N and xN in the entrance",
+          statusRef.current === "clear" ? "Launching next chamber" : "Thread the 1-square gate · catch +N / xN",
           W / 2,
           H / 2 + 22
         );
@@ -575,7 +807,7 @@ export default function BrickBreakDemo() {
           pointerToPaddle(event.touches[0].clientX, event.currentTarget);
         }}
       />
-      <GameTip>Swipe the full floor · catch +N to add balls, xN to multiply · Space launch</GameTip>
+      <GameTip>One-square gate · zigzag tunnel · yellow baffles · bumper diamonds boost speed</GameTip>
     </div>
   );
 }

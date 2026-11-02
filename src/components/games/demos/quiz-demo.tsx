@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useReportWhen } from "@/components/games/arcade-score";
+import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip, GamePulseBar } from "@/components/games/game-ui";
 
 type Question = {
@@ -58,6 +58,7 @@ export default function QuizDemo() {
   const [selected, setSelected] = useState<number | null>(null);
   const [done, setDone] = useState(false);
   const [streak, setStreak] = useState(0);
+  const { reportProgress } = useArcadeScore();
   useReportWhen(done, score);
 
   const question = QUESTIONS[index];
@@ -78,8 +79,10 @@ export default function QuizDemo() {
     if (selected !== null || done) return;
     setSelected(optionIndex);
     const correct = optionIndex === question.answer;
+    const next = correct ? score + 100 + streak * 20 : score;
+    reportProgress(correct ? "Correct answer" : "Wrong answer", next);
     if (correct) {
-      setScore((s) => s + 100 + streak * 20);
+      setScore(next);
       setStreak((s) => s + 1);
     } else {
       setStreak(0);
