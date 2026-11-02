@@ -118,6 +118,14 @@ h1, h2, h3, h4, .font-serif {
   100% { transform: translateX(360%); }
 }
 
+@keyframes chess-capture-impact {
+  0% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.75); }
+  45% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(251, 113, 133, 0.22); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 113, 133, 0); }
+}
+
+.chess-capture { animation: chess-capture-impact 550ms ease-out; }
+
 .page-load-bar { animation: page-load 1s ease-in-out infinite; }
 
 @media (max-width: 639px) {

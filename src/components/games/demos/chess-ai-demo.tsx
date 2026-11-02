@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageCircle, Send, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useReportWhen } from "@/components/games/arcade-score";
@@ -26,6 +27,30 @@ const GLYPH: Record<PieceChar, string> = {
   K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
   k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟",
 };
+
+const LETTER_GLYPH: Record<PieceChar, string> = {
+  K: "K", Q: "Q", R: "R", B: "B", N: "N", P: "P",
+  k: "k", q: "q", r: "r", b: "b", n: "n", p: "p",
+};
+
+const BOARD_STYLES = {
+  forest: { label: "Forest", light: "bg-[#d5e6d0]", dark: "bg-[#1a3a2f]" },
+  slate: { label: "Slate", light: "bg-slate-200", dark: "bg-slate-700" },
+  sand: { label: "Sand", light: "bg-[#f3dfb3]", dark: "bg-[#8b5e3c]" },
+  ocean: { label: "Ocean", light: "bg-cyan-100", dark: "bg-[#164e63]" },
+  midnight: { label: "Midnight", light: "bg-[#64748b]", dark: "bg-[#111827]" },
+  rose: { label: "Rose", light: "bg-rose-100", dark: "bg-[#701a35]" },
+} as const;
+
+type BoardStyle = keyof typeof BOARD_STYLES;
+type PieceStyle = "classic" | "letters" | "minimal";
+
+const MINIMAL_GLYPH: Record<PieceChar, string> = {
+  K: "♚", Q: "♛", R: "♜", B: "♝", N: "♞", P: "♟",
+  k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟",
+};
+
+const CHAT_LINES = ["Nice move!", "Good defense.", "That was close!", "I see your strategy.", "Your turn — show me what you have."];
 
 const VALUE: Record<string, number> = {
   P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000,
@@ -445,15 +470,33 @@ export default function ChessAiDemo() {
   const [turn, setTurn] = useState<Color>("w");
   const [selected, setSelected] = useState<number | null>(null);
   const [legal, setLegal] = useState<number[]>([]);
-  const [lastMove, setLastMove] = useState<{ from: number; to: number } | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: number; to: number; captured: boolean } | null>(null);
+  const [captureSquare, setCaptureSquare] = useState<number | null>(null);
   const [level, setLevel] = useState(100);
   const [thinking, setThinking] = useState(false);
   const [status, setStatus] = useState("Your move — Pro AI ready");
   const [history, setHistory] = useState<Board[]>([]);
+  const [boardStyle, setBoardStyle] = useState<BoardStyle>("forest");
+  const [pieceStyle, setPieceStyle] = useState<PieceStyle>("classic");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatText, setChatText] = useState("");
+  const [chatMessages, setChatMessages] = useState(() => [
+    { from: "Maya", text: CHAT_LINES[Math.floor(Math.random() * CHAT_LINES.length)] ?? "Nice move!" },
+  ]);
   const aiBusy = useRef(false);
 
   const whiteMoves = useMemo(() => legalMoves(board, "w"), [board]);
   const blackMoves = useMemo(() => legalMoves(board, "b"), [board]);
+  const boardColors = BOARD_STYLES[boardStyle];
+  const glyphs = pieceStyle === "classic" ? GLYPH : pieceStyle === "letters" ? LETTER_GLYPH : MINIMAL_GLYPH;
+
+  function sendChat(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = chatText.trim();
+    if (!text) return;
+    setChatMessages((messages) => [...messages.slice(-4), { from: "You", text }]);
+    setChatText("");
+  }
 
   const gameOver = useMemo(() => {
     if (turn === "w" && whiteMoves.length === 0) {
@@ -478,6 +521,7 @@ export default function ChessAiDemo() {
     setSelected(null);
     setLegal([]);
     setLastMove(null);
+    setCaptureSquare(null);
     setThinking(false);
     setHistory([]);
     setStatus(`Your move — Level ${level}`);
@@ -501,7 +545,11 @@ export default function ChessAiDemo() {
         }
         const next = applyMove(current, move);
         setBoard(next);
-        setLastMove({ from: move.from, to: move.to });
+        setLastMove({ from: move.from, to: move.to, captured: Boolean(move.captured) });
+        if (move.captured) {
+          setCaptureSquare(move.to);
+          window.setTimeout(() => setCaptureSquare(null), 550);
+        }
         setTurn("w");
         setThinking(false);
         aiBusy.current = false;
@@ -530,7 +578,11 @@ export default function ChessAiDemo() {
         setHistory((h) => [...h, board.slice() as Board]);
         const next = applyMove(board, move);
         setBoard(next);
-        setLastMove({ from: selected, to: i });
+        setLastMove({ from: selected, to: i, captured: Boolean(move.captured) });
+        if (move.captured) {
+          setCaptureSquare(i);
+          window.setTimeout(() => setCaptureSquare(null), 550);
+        }
         setSelected(null);
         setLegal([]);
         setTurn("b");
@@ -562,6 +614,7 @@ export default function ChessAiDemo() {
     setSelected(null);
     setLegal([]);
     setLastMove(null);
+    setCaptureSquare(null);
     setStatus("Move undone — your turn");
   }
 
@@ -587,6 +640,9 @@ export default function ChessAiDemo() {
         </Button>
         <Button size="sm" variant="outline" className="rounded-sm" onClick={reset}>
           New
+        </Button>
+        <Button size="icon" variant="outline" aria-label="Open chess appearance settings" title="Board and piece settings" onClick={() => setSettingsOpen(true)}>
+          <Settings2 aria-hidden />
         </Button>
       </GameHud>
 
@@ -620,6 +676,22 @@ export default function ChessAiDemo() {
         </div>
       </div>
 
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSettingsOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="chess-settings-title" className="w-full max-w-md rounded-3xl border border-white/70 bg-card p-5 text-card-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Customize board</p><h2 id="chess-settings-title" className="mt-1 font-serif text-2xl">Chess appearance</h2></div>
+              <Button type="button" size="icon" variant="ghost" aria-label="Close chess settings" onClick={() => setSettingsOpen(false)}><X aria-hidden /></Button>
+            </div>
+            <div className="mt-5 grid gap-5">
+              <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Board theme</p><div className="grid grid-cols-3 gap-2">{(Object.entries(BOARD_STYLES) as [BoardStyle, (typeof BOARD_STYLES)[BoardStyle]][]).map(([key, style]) => <button key={key} type="button" onClick={() => setBoardStyle(key)} className={cn("h-11 rounded-xl border text-xs font-medium transition", boardStyle === key ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-secondary")}>{style.label}</button>)}</div></div>
+              <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Piece style</p><div className="grid grid-cols-3 gap-2">{(["classic", "letters", "minimal"] as PieceStyle[]).map((key) => <button key={key} type="button" onClick={() => setPieceStyle(key)} className={cn("h-11 rounded-xl border text-xs font-medium transition", pieceStyle === key ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-secondary")}>{key === "classic" ? "♔ Classic" : key === "letters" ? "K Q Letters" : "♟ Minimal"}</button>)}</div></div>
+            </div>
+            <Button type="button" className="mt-6 w-full" onClick={() => setSettingsOpen(false)}>Done</Button>
+          </section>
+        </div>
+      )}
+
       <p
         className={cn(
           "min-h-[1.25rem] text-center text-sm font-medium transition-colors",
@@ -649,6 +721,7 @@ export default function ChessAiDemo() {
           const isSel = selected === i;
           const isLegal = legal.includes(i);
           const isLast = lastMove?.from === i || lastMove?.to === i;
+          const isCapture = captureSquare === i;
           const isKingCheck =
             inCheck && piece === "K";
 
@@ -659,12 +732,13 @@ export default function ChessAiDemo() {
               onClick={() => onSquare(i)}
               disabled={!!gameOver || thinking}
               className={cn(
-                "relative flex aspect-square min-h-0 min-w-0 items-center justify-center text-[clamp(1.35rem,5vw,2.25rem)] transition-all duration-150",
+                "relative flex aspect-square min-h-0 min-w-0 items-center justify-center text-[clamp(1.8rem,6vw,3rem)] transition-all duration-150",
                 dark
-                  ? "bg-[#1a3a2f] hover:brightness-110"
-                  : "bg-[#d5e6d0] text-zinc-900 hover:brightness-95 dark:bg-[#2a4a3c] dark:text-zinc-100",
+                  ? `${boardColors.dark} hover:brightness-110`
+                  : `${boardColors.light} text-zinc-900 hover:brightness-95`,
                 isSel && "ring-2 ring-inset ring-amber-400 brightness-110",
-                isLast && "bg-amber-400/25",
+                isLast && "bg-amber-400/30",
+                isCapture && "chess-capture z-10 bg-rose-400/45 ring-4 ring-rose-300/80",
                 isKingCheck && "bg-red-500/35 animate-pulse",
                 isLegal && !piece && "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-primary/55 after:content-['']",
                 isLegal && piece && "after:absolute after:inset-1 after:rounded-sm after:border-2 after:border-primary/70 after:content-['']"
@@ -674,11 +748,16 @@ export default function ChessAiDemo() {
               {piece && (
                 <span
                   className={cn(
-                    "relative z-[1] drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] transition-transform duration-150",
+                    "relative z-[1] font-serif leading-none transition-transform duration-150",
                     isSel && "-translate-y-0.5 scale-110"
                   )}
+                  style={{
+                    WebkitTextStroke: isWhite(piece) ? "1px #7c5b43" : "1px #f8fafc",
+                    textShadow: isWhite(piece) ? "0 3px 0 #6b4f3a, 0 0 10px rgba(255,255,255,.5)" : "0 3px 0 #020617, 0 0 10px rgba(255,255,255,.3)",
+                    color: isWhite(piece) ? "#fff8e7" : dark ? "#172033" : "#111827",
+                  }}
                 >
-                  {GLYPH[piece]}
+                  {glyphs[piece]}
                 </span>
               )}
             </button>
@@ -689,6 +768,12 @@ export default function ChessAiDemo() {
       <GameTip>
         Legal moves highlighted · Level 100 = Pro engine (depth 5 + PST)
       </GameTip>
+
+      <section className="w-full max-w-[34rem] overflow-hidden rounded-2xl border border-border bg-card shadow-sm" aria-label="Global game chat">
+        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3"><div className="flex items-center gap-2"><MessageCircle className="size-4 text-primary" aria-hidden /><p className="text-sm font-semibold">Game chat</p></div><span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Quick messages</span></div>
+        <div className="grid max-h-36 gap-2 overflow-y-auto px-4 py-3">{chatMessages.map((message, index) => <p key={`${message.from}-${index}`} className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-sm", message.from === "You" ? "ml-auto bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground")}><span className="mr-1 text-[10px] font-semibold uppercase opacity-70">{message.from}</span>{message.text}</p>)}</div>
+        <form onSubmit={sendChat} className="flex gap-2 border-t border-border p-3"><input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Say something nice…" aria-label="Game chat message" className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30" /><Button type="submit" size="icon" aria-label="Send chat message"><Send aria-hidden /></Button></form>
+      </section>
     </div>
   );
 }
