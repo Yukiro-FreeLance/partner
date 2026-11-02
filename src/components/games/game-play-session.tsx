@@ -491,7 +491,7 @@ export function GamePlaySession({
 
       {status && <p className="rounded-2xl bg-secondary px-4 py-3 text-sm text-secondary-foreground" role="status">{status}{busy ? " Saving…" : ""}</p>}
 
-      {challenge && turns.length > 0 && (
+      {challenge && !sharedBoard && turns.length > 0 && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3">
           <p className="text-xs font-medium">Recent turns</p>
           <ul className="mt-1 grid gap-1 text-xs text-muted-foreground">
@@ -549,6 +549,20 @@ export function GamePlaySession({
           </div>
         )}
       </ArcadeScoreProvider>
+
+      {sharedBoard && turns.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3">
+          <p className="text-xs font-medium">Recent turns</p>
+          <ul className="mt-1 grid gap-1 text-xs text-muted-foreground">
+            {turns.slice(-4).map((turn, index) => (
+              <li key={`${turn.at}-${turn.seat}-${index}`}>
+                <span className="text-foreground">{turn.seat === seat ? "You" : partnerName ?? "Partner"}</span>
+                {` · ${turn.note}`}{turn.score ? ` · ${turn.score}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Global names stay hidden unless you opt in under{" "}
