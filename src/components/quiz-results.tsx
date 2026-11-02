@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatScore } from "@/lib/scoring";
 
 export function ScoreReveal({ score, label }: { score: number | null; label: string }) {
   const reduce = useReducedMotion();
@@ -13,7 +14,7 @@ export function ScoreReveal({ score, label }: { score: number | null; label: str
     let frame = 0;
     const tick = (now: number) => {
       const progress = Math.min(1, (now - started) / 900);
-      setShown(Math.round(score * progress));
+      setShown(Math.round(score * progress * 10) / 10);
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -51,7 +52,7 @@ export function CategoryChart({ rows }: { rows: { name: string; score: number }[
         <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 8 }}>
           <XAxis type="number" domain={[0, 100]} hide />
           <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value) => [`${value}%`, "Matched"]} />
+          <Tooltip formatter={(value) => [formatScore(Number(value)), "Accuracy"]} />
           <Bar dataKey="score" fill="#7c3aed" radius={8} />
         </BarChart>
       </ResponsiveContainer>

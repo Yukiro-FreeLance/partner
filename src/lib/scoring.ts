@@ -260,7 +260,13 @@ export function combineSummaries(left: ScoreSummary, right: ScoreSummary): Score
 
 export function formatScore(score: number | null) {
   if (score === null) return "Not enough answers yet";
-  return `${Math.round(score)}%`;
+  const rounded = Math.round(score * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`;
+}
+
+export function formatPoints(points: number, eligible: number) {
+  const value = Math.round(points * 10) / 10;
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}/${eligible} points`;
 }
 
 export const SCORE_DISCLAIMER =

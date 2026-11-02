@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   combineSummaries,
   compareResponses,
+  formatPoints,
   formatScore,
   isPartnerPrediction,
   knowledgeBand,
@@ -133,10 +134,16 @@ describe("summarize", () => {
     expect(summary.points).toBeCloseTo(1.75, 3);
     expect(summary.score).toBeCloseTo(87.5, 3);
     expect(summary.label).toBe("Great Connection");
+    expect(formatScore(summary.score)).toBe("87.5%");
     expect(knowledgeBand(90).label).toBe("In Sync");
     expect(knowledgeBand(55).label).toBe("Getting Closer");
     expect(knowledgeBand(30).label).toBe("Learning Each Other");
     expect(knowledgeBand(29).label).toBe("Fresh Discoveries Ahead");
+  });
+
+  it("formats fractional points without hiding partial credit", () => {
+    expect(formatPoints(1.5, 2)).toBe("1.5/2 points");
+    expect(formatScore(100)).toBe("100%");
   });
 
   it("keeps preference labels distinct from knowledge labels", () => {

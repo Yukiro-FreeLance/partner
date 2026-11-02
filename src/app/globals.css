@@ -68,8 +68,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: "Poppins", "Avenir Next", Arial, sans-serif;
-  --font-serif: "Montserrat", "Avenir Next", Arial, sans-serif;
+  --font-sans: var(--font-poppins), "Poppins", "Avenir Next", Arial, sans-serif;
+  --font-serif: var(--font-montserrat), "Montserrat", "Avenir Next", Arial, sans-serif;
   --radius-lg: var(--radius);
 }
 

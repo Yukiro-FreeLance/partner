@@ -4,7 +4,7 @@ import { CategoryChart, ScoreReveal, ShareResult } from "@/components/quiz-resul
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
-import { compareResponses, formatScore, SCORE_DISCLAIMER, summarize } from "@/lib/scoring";
+import { compareResponses, formatPoints, formatScore, SCORE_DISCLAIMER, summarize } from "@/lib/scoring";
 import { otherPartner } from "@/lib/services/access";
 import { getRoundResults } from "@/lib/services/quiz";
 
@@ -44,9 +44,11 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
     current.count += 1;
     byCategory.set(name, current);
   }
-  const chart = [...byCategory.entries()].map(([name, value]) => ({ name, score: Math.round((value.points / value.count) * 100) }));
+  const chart = [...byCategory.entries()].map(([name, value]) => ({ name, score: (value.points / value.count) * 100 }));
   const snapshots = snapshotRows.filter((item) => item.roundId !== round.id && item.score != null);
-  const previous = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + (item.score ?? 0), 0) / snapshots.length) : null;
+  const previousEligible = snapshots.reduce((sum, item) => sum + item.eligible, 0);
+  const previousPoints = snapshots.reduce((sum, item) => sum + item.points, 0);
+  const previous = previousEligible > 0 ? (previousPoints / previousEligible) * 100 : null;
   const seconds = session?.completedAt ? Math.max(0, Math.round((Date.parse(session.completedAt) - Date.parse(session.startedAt)) / 1000)) : null;
   const share = [
     round.title,
@@ -60,7 +62,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
     <main className="grid w-full gap-4 px-4 py-6 lg:px-8">
       <p className="text-sm text-muted-foreground">{round.title}</p>
       <h1 className="font-serif text-4xl">What this round showed</h1>
-      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary.eligible > 0 ? `You matched ${summary.correct} of ${summary.eligible} scored guesses.` : waiting > 0 ? `${waiting} guess${waiting === 1 ? "" : "es"} ${waiting === 1 ? "is" : "are"} saved and waiting on ${partnerName ?? "your partner"}.` : summary.description} {SCORE_DISCLAIMER}</p>
+      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{summary.eligible > 0 ? `${summary.correct} exact match${summary.correct === 1 ? "" : "es"}, ${summary.close} close, and ${summary.incorrect} different across ${summary.eligible} scored guesses (${formatPoints(summary.points, summary.eligible)}).` : waiting > 0 ? `${waiting} guess${waiting === 1 ? "" : "es"} ${waiting === 1 ? "is" : "are"} saved and waiting on ${partnerName ?? "your partner"}.` : summary.description} {SCORE_DISCLAIMER}</p>
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="panel p-5">
           <h2 className="font-serif text-2xl">Goal</h2>
@@ -85,7 +87,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
       )}
       <section className="grid gap-4 lg:grid-cols-[220px_1fr]">
         <article className="panel p-5">
-          <ScoreReveal score={summary.score == null ? null : Math.round(summary.score)} label={summary.label} />
+          <ScoreReveal score={summary.score == null ? null : Math.round(summary.score * 10) / 10} label={summary.label} />
           {seconds != null && <p className="mt-3 text-center text-xs text-muted-foreground">Finished in {Math.floor(seconds / 60)}m {seconds % 60}s</p>}
         </article>
         <article className="panel p-5">
@@ -136,7 +138,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
           <p className="mt-2 text-sm">Your prediction accuracy: {formatScore(summary.score)}</p>
           <p className="text-sm">{partnerScore != null ? `${partnerName ?? "Your partner"}'s prediction accuracy: ${formatScore(partnerScore)}` : `${partnerName ?? "Your partner"}'s score appears after they finish a guess about you.`}</p>
           <p className="mt-3 text-sm">Preference alignment: {formatScore(preference.score)}. {preference.description}</p>
-          {previous != null && summary.score != null && <p className="mt-3 text-sm text-muted-foreground">Your earlier counted rounds averaged {previous}%. This round is {Math.round(summary.score)}%.</p>}
+          {previous != null && summary.score != null && <p className="mt-3 text-sm text-muted-foreground">Your earlier answers averaged {formatScore(previous)} across {previousEligible} questions. This round is {formatScore(summary.score)}. Earlier rounds are weighted by counted answers.</p>}
         </article>
         <article className="panel p-5">
           <h2 className="font-serif text-2xl">By category</h2>

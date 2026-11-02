@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Montserrat, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
@@ -7,6 +8,9 @@ import { ThemeSync } from "@/components/theme-sync";
 import { siteOrigin } from "@/lib/site-origin";
 import { getSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 import "./globals.css";
+
+const poppins = Poppins({ variable: "--font-poppins", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const montserrat = Montserrat({ variable: "--font-montserrat", subsets: ["latin"], weight: ["600", "700"], style: ["normal", "italic"], display: "swap" });
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
@@ -53,7 +57,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = store.get("locale")?.value === "fil" ? "fil" : "en";
   const dark = theme === "dark";
   return (
-    <html lang={locale} className={`h-full antialiased ${dark ? "dark" : ""}`} suppressHydrationWarning>
+    <html lang={locale} className={`${poppins.variable} ${montserrat.variable} h-full antialiased ${dark ? "dark" : ""}`} suppressHydrationWarning>
       <body className="min-h-full">
         <script
           dangerouslySetInnerHTML={{
