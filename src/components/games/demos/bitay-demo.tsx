@@ -340,14 +340,14 @@ export default function BitayDemo() {
   }, [guess, nextRound]);
 
   return (
-    <div className="relative flex w-full flex-col gap-3 sm:gap-4">
+    <div className="relative flex w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden sm:gap-4">
       <AnimatePresence>{flash ? <Sparks tone={flash} /> : null}</AnimatePresence>
       <AnimatePresence>
         {rewards.map((reward) => (
           <RewardBurst key={reward.id} reward={reward} />
         ))}
       </AnimatePresence>
-      <GameHud className="w-full">
+      <GameHud className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         <motion.div key={scorePulse} initial={{ scale: 1 }} animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 0.35 }}>
           <GameStat label="Score" value={score} accent />
         </motion.div>
@@ -373,7 +373,7 @@ export default function BitayDemo() {
         </Button>
       </GameHud>
 
-      <div className="flex w-full gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+      <div className="flex w-full min-w-0 flex-wrap gap-1.5 pb-0.5">
         {CATEGORIES.map((item) => {
           const active = category === item;
           return (
@@ -382,7 +382,7 @@ export default function BitayDemo() {
               type="button"
               onClick={() => selectCategory(item)}
               className={cn(
-                "shrink-0 rounded-sm border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors sm:text-[11px]",
+                "rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors sm:px-2.5 sm:tracking-[0.14em] sm:text-[11px]",
                 active
                   ? "border-primary/50 bg-secondary text-secondary-foreground"
                   : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
@@ -400,7 +400,7 @@ export default function BitayDemo() {
       <div className="relative w-full overflow-hidden border border-border/60 bg-card/80">
       <motion.div
         className={cn(
-          "grid w-full gap-3 p-3 sm:gap-4 sm:p-4 md:grid-cols-[minmax(10rem,14rem)_1fr] md:items-start md:p-5",
+          "grid w-full min-w-0 gap-3 p-3 sm:gap-4 sm:p-4 md:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)] md:items-start md:p-5",
           flash === "bad" && "ring-1 ring-rose-400/70",
           flash === "ok" && "ring-1 ring-emerald-400/70"
         )}
@@ -420,7 +420,7 @@ export default function BitayDemo() {
         </div>
 
         <div className="flex min-w-0 flex-col">
-          <div className="flex w-full flex-nowrap justify-center gap-1 md:justify-start">
+          <div className="flex w-full min-w-0 flex-nowrap justify-center gap-1 md:justify-start">
             {letters.map((ch, i) => {
               const show = guessed.has(ch) || lost;
               const missed = lost && !guessed.has(ch);

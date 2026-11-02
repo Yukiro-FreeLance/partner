@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { gameMatchCode } from "@/lib/games/catalog";
 
 export type MatchTimelineItem = {
   id: string;
@@ -132,7 +133,7 @@ export function MatchTimeline({ initial, partnerName }: { initial: MatchTimeline
                 <Link href={`/play/games/${match.slug}?mode=partner&kind=${match.kind}&match=${match.id}`} className="block rounded-2xl px-2 py-1 hover:bg-secondary">
                   <p className="text-sm font-medium">{match.emoji} {match.title}</p>
                   <p className={`text-xs ${match.yourTurn && match.status === "open" ? "text-primary" : "text-muted-foreground"}`}>{label}{score ? ` · ${score}` : ""}</p>
-                  <p className="text-[11px] text-muted-foreground" suppressHydrationWarning>{match.kind === "hotseat" ? "Same device" : "Two devices"} · {when(match.updatedAt)}</p>
+                   <p className="text-[11px] text-muted-foreground" suppressHydrationWarning>{match.kind === "hotseat" ? "Same device" : "Two devices"} · Code {gameMatchCode(match.id)} · {when(match.updatedAt)}</p>
                 </Link>
               </li>
             );

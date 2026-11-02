@@ -33,7 +33,7 @@ export function GameDemo({ slug }: { slug: string }) {
   const Demo = DEMO_BY_SLUG[slug];
   if (!Demo) return <p className="text-sm text-muted-foreground">This game is not available yet.</p>;
   return (
-    <div className="min-h-[26rem] overflow-hidden rounded-[1.75rem] border border-border bg-card p-4 text-card-foreground shadow-[var(--shadow)] sm:min-h-[32rem] sm:p-7 lg:min-h-[38rem]">
+    <div className="min-h-0 w-full min-w-0 overflow-hidden rounded-[1.75rem] border border-border bg-card p-2 text-card-foreground shadow-[var(--shadow)] sm:min-h-[28rem] sm:p-6 lg:min-h-[34rem]">
       <Demo />
     </div>
   );

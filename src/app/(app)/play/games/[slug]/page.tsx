@@ -44,7 +44,7 @@ export default async function ArcadeGamePage({
   const matchMode = arcadeMatchMode(game.slug);
 
   return (
-    <main className="mx-auto grid w-full max-w-[1440px] gap-6 px-4 py-5 lg:px-8">
+    <main className="mx-auto grid w-full min-w-0 max-w-[1440px] gap-6 overflow-x-hidden px-3 py-5 pb-28 sm:px-4 sm:pb-8 lg:px-8">
       <header className="max-w-4xl">
         <p className="text-sm text-muted-foreground">
           <Link href="/play/games" className="underline">Arcade games</Link>
@@ -91,7 +91,7 @@ export default async function ArcadeGamePage({
           </Button>
         </div>
       )}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
         <GamePlaySession
           key={match?.id ?? `${game.slug}-${mode}-${kind}`}
           slug={game.slug}

@@ -188,6 +188,10 @@ export function isArcadeSlug(slug: string) {
   return ARCADE_GAMES.some((game) => game.slug === slug);
 }
 
+export function gameMatchCode(id: string) {
+  return id.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+}
+
 /** Every listed arcade game supports a partner challenge; the board game is turn-based and the rest are independent score races. */
 export function arcadeMatchMode(slug: string): ArcadeMatchMode {
   return slug === "tic-tac-toe" ? "turn-based" : "score-race";

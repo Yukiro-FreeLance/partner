@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useArcadeScore, useReportWhen } from "@/components/games/arcade-score";
@@ -9,22 +10,26 @@ import { GameHud, GameTip } from "@/components/games/game-ui";
 type Player = "X" | "O" | null;
 type Board = Player[];
 
-const WIN_LINES = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6],
-];
+function winLines(size: number) {
+  const lines: number[][] = [];
+  for (let row = 0; row < size; row += 1) lines.push(Array.from({ length: size }, (_, col) => row * size + col));
+  for (let col = 0; col < size; col += 1) lines.push(Array.from({ length: size }, (_, row) => row * size + col));
+  lines.push(Array.from({ length: size }, (_, i) => i * (size + 1)));
+  lines.push(Array.from({ length: size }, (_, i) => (i + 1) * (size - 1)));
+  return lines;
+}
 
-function checkWinner(board: Board): Player | "draw" | null {
-  for (const [a, b, c] of WIN_LINES) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+function checkWinner(board: Board, size: number): Player | "draw" | null {
+  for (const line of winLines(size)) {
+    const first = line[0];
+    if (board[first] && line.every((index) => board[index] === board[first])) return board[first];
   }
   if (board.every(Boolean)) return "draw";
   return null;
 }
 
 function minimax(board: Board, isMax: boolean): number {
-  const result = checkWinner(board);
+  const result = checkWinner(board, 3);
   if (result === "O") return 1;
   if (result === "X") return -1;
   if (result === "draw") return 0;
@@ -72,13 +77,20 @@ export default function TicTacToeDemo() {
   const arcade = useArcadeScore();
   const [board, setBoard] = useState<Board>(Array(9).fill(null));
   const [mode, setMode] = useState<"ai" | "pvp">(arcade.pvp ? "pvp" : "ai");
+  const [boardSize, setBoardSize] = useState(3);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const challenge = arcade.kind === "challenge";
+  const activeSize = challenge ? 3 : boardSize;
   const cells: Board = challenge ? (arcade.board ?? Array<Player>(9).fill(null)) : board;
-  const winner = checkWinner(cells);
+  const winner = checkWinner(cells, activeSize);
+  const winningLines = winLines(activeSize);
   const isXTurn = cells.filter(Boolean).length % 2 === 0;
   useEffect(() => {
     if (arcade.pvp) setMode("pvp");
   }, [arcade.pvp]);
+  useEffect(() => {
+    if (boardSize > 3) setMode("pvp");
+  }, [boardSize]);
   useReportWhen(!challenge && Boolean(winner), winner === "X" ? 100 : winner === "draw" ? 50 : 0);
 
   const handleClick = useCallback(
@@ -95,7 +107,7 @@ export default function TicTacToeDemo() {
       next[index] = isXTurn ? "X" : "O";
       setBoard(next);
 
-      if (mode === "ai" && !checkWinner(next)) {
+       if (mode === "ai" && boardSize === 3 && !checkWinner(next, boardSize)) {
         setTimeout(() => {
           const aiBoard = [...next];
           const move = bestMove(aiBoard);
@@ -106,11 +118,11 @@ export default function TicTacToeDemo() {
         }, 300);
       }
     },
-    [board, winner, mode, isXTurn, challenge, arcade]
+    [board, winner, mode, isXTurn, challenge, arcade, boardSize]
   );
 
   function reset() {
-    setBoard(Array(9).fill(null));
+    setBoard(Array(boardSize * boardSize).fill(null));
   }
 
   const status = winner
@@ -158,7 +170,20 @@ export default function TicTacToeDemo() {
           <Button size="sm" variant="ghost" className="rounded-sm" onClick={reset}>
             Reset
           </Button>
+          <Button size="icon" variant="outline" aria-label="Open tic tac toe settings" title="Board settings" onClick={() => setSettingsOpen(true)}>
+            <Settings2 aria-hidden />
+          </Button>
         </GameHud>
+      )}
+
+      {settingsOpen && !challenge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSettingsOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="tic-settings-title" className="w-full max-w-sm rounded-3xl border border-white/70 bg-card p-5 text-card-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Game settings</p><h2 id="tic-settings-title" className="mt-1 font-serif text-2xl">Choose your board</h2></div><Button type="button" size="icon" variant="ghost" aria-label="Close board settings" onClick={() => setSettingsOpen(false)}><X aria-hidden /></Button></div>
+            <p className="mt-2 text-sm text-muted-foreground">Complete a row, column, or diagonal to win. Larger boards use two-player mode.</p>
+            <div className="mt-5 grid grid-cols-3 gap-2">{[3, 4, 5].map((size) => <button key={size} type="button" onClick={() => { setBoardSize(size); setMode(size === 3 ? mode : "pvp"); setBoard(Array(size * size).fill(null)); setSettingsOpen(false); }} className={cn("h-14 rounded-xl border text-sm font-semibold transition", boardSize === size ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-secondary")}><span className="block text-lg">{size}×{size}</span><span className="text-[10px] font-normal text-muted-foreground">{size === 3 ? "Classic" : "Two player"}</span></button>)}</div>
+          </section>
+        </div>
       )}
 
       <p
@@ -188,7 +213,7 @@ export default function TicTacToeDemo() {
               "border-border/60 bg-card/90 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 active:scale-95",
               cell === "X" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.25)]",
               cell === "O" && "border-violet-500/40 bg-violet-500/10 text-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.25)]",
-              winner && WIN_LINES.some((line) => line.includes(i) && line.every((idx) => cells[idx] === winner)) &&
+              winner && winningLines.some((line) => line.includes(i) && line.every((idx) => cells[idx] === winner)) &&
                 "ring-2 ring-primary scale-105"
             )}
             aria-label={cell ? `Cell ${i + 1}: ${cell}` : `Empty cell ${i + 1}`}

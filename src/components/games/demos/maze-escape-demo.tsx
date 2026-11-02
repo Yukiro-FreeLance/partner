@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useReportWhen } from "@/components/games/arcade-score";
 import { GameHud, GameStat, GameTip } from "@/components/games/game-ui";
 
-const SIZE = 15;
+const SIZE = 21;
 
 type Cell = 0 | 1; // 0 path, 1 wall
 type Pos = { x: number; y: number };
@@ -65,6 +65,7 @@ export default function MazeEscapeDemo() {
   const [maze, setMaze] = useState<Cell[][]>(createInitialMaze);
   const [player, setPlayer] = useState<Pos>({ x: 1, y: 1 });
   const [moves, setMoves] = useState(0);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const goal = { x: SIZE - 2, y: SIZE - 2 };
   const won = player.x === goal.x && player.y === goal.y;
   useReportWhen(won, Math.max(0, 800 - moves * 4));
@@ -122,6 +123,23 @@ export default function MazeEscapeDemo() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tryMove, reset]);
 
+  function handleTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    const touch = event.touches[0];
+    if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    const start = touchStart.current;
+    const touch = event.changedTouches[0];
+    touchStart.current = null;
+    if (!start || !touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) tryMove(dx > 0 ? 1 : -1, 0);
+    else tryMove(0, dy > 0 ? 1 : -1);
+  }
+
   return (
     <div className="flex flex-col items-center gap-4">
       <GameHud>
@@ -142,6 +160,8 @@ export default function MazeEscapeDemo() {
         style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }}
         role="grid"
         aria-label="Maze"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         {maze.map((row, y) =>
           row.map((cell, x) => {
@@ -163,21 +183,26 @@ export default function MazeEscapeDemo() {
         )}
       </div>
 
-      <div className="grid w-full max-w-xs grid-cols-3 gap-2 md:hidden">
+      <div className="grid w-full max-w-xs grid-cols-3 gap-2 md:hidden" aria-label="Maze touch controls">
         <div />
-        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(0, -1)}>
+        <Button type="button" aria-label="Move up" size="sm" variant="secondary" className="h-16 rounded-2xl text-3xl" onClick={() => tryMove(0, -1)}>
           ↑
         </Button>
         <div />
-        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(-1, 0)}>
+        <Button type="button" aria-label="Move left" size="sm" variant="secondary" className="h-16 rounded-2xl text-3xl" onClick={() => tryMove(-1, 0)}>
           ←
         </Button>
-        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(0, 1)}>
-          ↓
+        <Button type="button" aria-label="Reset maze" size="sm" variant="outline" className="h-16 rounded-2xl text-2xl" onClick={reset}>
+          ↻
         </Button>
-        <Button size="sm" variant="secondary" className="h-14 rounded-xl text-2xl" onClick={() => tryMove(1, 0)}>
+        <Button type="button" aria-label="Move right" size="sm" variant="secondary" className="h-16 rounded-2xl text-3xl" onClick={() => tryMove(1, 0)}>
           →
         </Button>
+        <div />
+        <Button type="button" aria-label="Move down" size="sm" variant="secondary" className="h-16 rounded-2xl text-3xl" onClick={() => tryMove(0, 1)}>
+          ↓
+        </Button>
+        <div />
       </div>
 
       <GameTip>WASD / Arrows · Glow = exit node</GameTip>

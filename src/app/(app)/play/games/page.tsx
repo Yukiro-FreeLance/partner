@@ -54,7 +54,7 @@ export default async function GamesPage() {
   const losses = completed.length - wins - draws;
 
   return (
-    <main className="grid w-full gap-6 px-4 py-5 lg:px-8">
+    <main className="grid w-full min-w-0 gap-6 overflow-x-hidden px-3 py-5 pb-28 sm:px-4 sm:pb-8 lg:px-8">
       <header className="max-w-3xl">
         <p className="text-sm text-muted-foreground">
           <Link href="/play" className="underline">Play</Link>
@@ -74,10 +74,10 @@ export default async function GamesPage() {
           </div>
         ))}
       </section>
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <section className="grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {ARCADE_GAMES.map((game) => (
-          <article key={game.slug} className="panel group flex flex-col gap-3 p-3">
+          <article key={game.slug} className="panel group flex min-w-0 w-full flex-col gap-3 p-3">
             <GameCover slug={game.slug} title={game.title} emoji={game.emoji} />
             <div className="flex min-w-0 flex-1 flex-col px-1">
                 <div className="flex items-center justify-between gap-2">

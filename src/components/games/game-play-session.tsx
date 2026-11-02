@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Check, Copy, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ArcadeScoreProvider, type ArcadeKind, type ArcadeMode, type ArcadeSeat } from "@/components/games/arcade-score";
 import { cn } from "@/lib/utils";
 import type { GameMatchView } from "@/lib/services/games";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
+import { gameMatchCode } from "@/lib/games/catalog";
 
 type Props = {
   slug: string;
@@ -86,6 +88,9 @@ export function GamePlaySession({
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [rematchBusy, setRematchBusy] = useState(false);
+  const [copiedMatch, setCopiedMatch] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
   const [pendingMove, setPendingMove] = useState(false);
   const turnRef = useRef(initialTurn);
   const revisionRef = useRef(initialRevision);
@@ -272,6 +277,35 @@ export function GamePlaySession({
             ? `Make your move — ${name} sees it instantly.`
             : `${name} is playing on their device. Your turn starts automatically when they finish.`;
   const scoreSummary = `${mine ?? 0}–${theirs ?? 0}`;
+  const matchCode = activeMatch ? gameMatchCode(activeMatch) : null;
+
+  async function copyMatchLink() {
+    if (!activeMatch) return;
+    const link = window.location.href;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedMatch(true);
+      window.setTimeout(() => setCopiedMatch(false), 1800);
+    } catch {
+      setStatus(`Match code: ${matchCode}`);
+    }
+  }
+
+  async function toggleFullscreen() {
+    if (!fullscreenRef.current) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await fullscreenRef.current.requestFullscreen();
+    } catch {
+      setStatus("Fullscreen mode is not available on this device.");
+    }
+  }
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === fullscreenRef.current);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
   const result = complete
     ? (mine ?? 0) > (theirs ?? 0) ? "You Win" : (mine ?? 0) < (theirs ?? 0) ? "You Lose" : "Draw"
     : null;
@@ -440,10 +474,10 @@ export function GamePlaySession({
   );
 
   return (
-    <div className="grid gap-4">
+    <div ref={fullscreenRef} className={cn("grid min-w-0 gap-4", isFullscreen && "min-h-dvh overflow-y-auto bg-background p-4 sm:p-8")}>
       <div
         className={cn(
-          "rounded-2xl border px-4 py-4 shadow-[var(--shadow)] transition-colors",
+          "min-w-0 rounded-2xl border px-3 py-3 shadow-[var(--shadow)] transition-colors sm:px-4 sm:py-4",
           yourTurn ? "border-primary/35 bg-primary/5" : "border-border bg-card",
         )}
         role="status"
@@ -457,8 +491,8 @@ export function GamePlaySession({
               <span className={cn("relative inline-flex size-3 rounded-full", yourTurn ? "bg-primary" : complete ? "bg-muted-foreground" : "bg-amber-500")} />
             </span>
             <div className="min-w-0">
-              <p className={cn("font-serif text-xl leading-tight", yourTurn && "text-primary")}>{turnHeading}</p>
-              <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">{turnDetail}</p>
+              <p className={cn("font-serif text-lg leading-tight sm:text-xl", yourTurn && "text-primary")}>{turnHeading}</p>
+              <p className="mt-0.5 max-w-xl text-xs leading-4 text-muted-foreground sm:mt-1 sm:leading-5">{turnDetail}</p>
               {challenge && liveNote && (
                 <p className="mt-1 text-xs text-foreground">
                   <span className={cn("font-medium", canPlay ? "text-primary" : "text-amber-600")}>{canPlay ? "You" : partnerName ?? "Partner"}</span>
@@ -467,7 +501,7 @@ export function GamePlaySession({
               )}
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex w-full flex-row flex-wrap items-center justify-start gap-1.5 sm:max-w-[58%] sm:justify-end sm:gap-2">
             {challenge && (
               <span
                 className={cn(
@@ -479,6 +513,16 @@ export function GamePlaySession({
                 {SYNC_COPY[syncState]}
               </span>
             )}
+            {activeMatch && mode !== "solo" && (
+              <button type="button" onClick={() => void copyMatchLink()} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-secondary" title="Copy match link">
+                {copiedMatch ? <Check className="size-3.5 text-emerald-600" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                <span>Code {matchCode}</span>
+              </button>
+            )}
+            <button type="button" onClick={() => void toggleFullscreen()} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-secondary" title={isFullscreen ? "Exit fullscreen" : "Open fullscreen"}>
+              {isFullscreen ? <Minimize2 className="size-3.5" aria-hidden /> : <Maximize2 className="size-3.5" aria-hidden />}
+              <span className="hidden sm:inline">{isFullscreen ? "Exit" : "Fullscreen"}</span>
+            </button>
             {mode !== "solo" && (
               <div className="flex flex-wrap justify-end gap-2 text-xs">
                 <span className="whitespace-nowrap rounded-full bg-secondary px-3 py-1 text-secondary-foreground">You {mine ?? "—"}</span>
