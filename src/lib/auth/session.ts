@@ -371,6 +371,7 @@ export function defaultPreferences(userId: string): UserPreferences {
     recentCardIds: [],
     onboardingStep: "profile",
     onboardingCompleted: false,
+    showOnGameLeaderboard: false,
   };
 }
 

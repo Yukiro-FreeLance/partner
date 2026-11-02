@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { categories } from "@/lib/content/catalog";
 import { getRepository } from "@/lib/data";
+import { ARCADE_GAMES } from "@/lib/games/catalog";
 import { listRoundCards } from "@/lib/services/quiz";
 
 export const metadata = { title: "Play" };
@@ -36,10 +37,35 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
         {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
       </header>
       <div className="flex flex-wrap gap-3 text-sm">
+        <Link className="underline" href="/play/games">Arcade games</Link>
+        <Link className="underline" href="/play/games/ranks">Game ranking</Link>
         <Link className="underline" href="/play/daily">Daily question</Link>
         <Link className="underline" href="/play/library">Question library</Link>
         <Link className="underline" href="/play/custom">Custom quiz</Link>
       </div>
+      <section className="panel p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-2xl">Arcade games</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">WenDev games you can play alone or with your partner. Global ranking is opt-in in Settings.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline"><Link href="/play/games">All games</Link></Button>
+            <Button asChild variant="outline"><Link href="/play/games/ranks">Ranking</Link></Button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {ARCADE_GAMES.slice(0, 6).map((game) => (
+            <Link key={game.slug} href={`/play/games/${game.slug}?mode=solo`} className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-lg" aria-hidden>{game.emoji}</span>
+              <span className="min-w-0">
+                <span className="block font-medium leading-tight">{game.title}</span>
+                <span className="block text-xs text-muted-foreground">{game.pvp ? "1 player or partner" : "1 player · partner challenge"}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
       <section className="grid gap-3 lg:grid-cols-2">
         {modes.map(([mode, title, size, description, category]) => (
           <form id={title === "Quick quiz" ? "quick-quiz" : title === "Deep dive" ? "deep-dive" : undefined} key={title} action={startQuizAction} className="panel flex items-center gap-2 p-3 motion-safe:transition motion-safe:hover:-translate-y-0.5 sm:gap-3 sm:p-4">

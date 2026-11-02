@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 const playLinks = [
   { href: "/play", label: "Partner Quiz", exact: true },
+  { href: "/play/games", label: "Arcade games" },
+  { href: "/play/games/ranks", label: "Game ranking" },
   { href: "/play/daily", label: "Daily Question" },
   { href: "/play#quick-quiz", label: "Quick Quiz" },
   { href: "/play#deep-dive", label: "Deep Dive" },

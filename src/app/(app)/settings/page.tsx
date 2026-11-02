@@ -75,6 +75,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <label className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border px-3 text-sm">Pause streak without losing points <input name="streakPaused" type="checkbox" defaultChecked={user.preferences.streakPaused} /></label>
           <label className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border px-3 text-sm">Reduce motion <input name="reducedMotion" type="checkbox" defaultChecked={user.preferences.reducedMotion} /></label>
           <p className="text-xs leading-5 text-muted-foreground sm:col-span-2">A paused streak keeps the points you already earned. Reduced motion calms animations on this device.</p>
+          <input type="hidden" name="gameRankingPrivacy" value="1" />
+          <div id="game-ranking" className="grid gap-2 rounded-2xl border px-3 py-3 sm:col-span-2">
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">Show me on the global game ranking <input name="showOnGameLeaderboard" type="checkbox" defaultChecked={Boolean(user.preferences.showOnGameLeaderboard)} /></label>
+            <p className="text-xs leading-5 text-muted-foreground">Off by default. When this is on, other CoupleSync players can see your display name, photo, and best arcade scores. Quiz answers and personality results stay private either way.</p>
+          </div>
           <Button type="submit" className="sm:col-span-2">Save settings</Button>
         </form>
       </div>
