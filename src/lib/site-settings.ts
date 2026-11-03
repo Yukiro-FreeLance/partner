@@ -30,6 +30,7 @@ export const defaultSiteSettings: SiteSettings = {
   aiName: "WenX",
   aiProvider: "opencode",
   aiModel: "",
+  aiCustomProvider: "",
   updatedAt: "",
 };
 

@@ -42,12 +42,15 @@ export const contactSchema = z.object({
 });
 
 const journalVisibility = z.enum(["private", "partner", "public"]);
+const imageRef = z.string().trim().min(1).max(400).startsWith("/api/media/");
+const genreItem = z.string().trim().min(1).max(60);
 export const movieSchema = z.object({
-  title: z.string().trim().min(1).max(160),
+  title: z.string().trim().max(160).optional(),
   tmdbId: z.coerce.number().int().positive().nullable().optional(),
-  posterUrl: z.string().url().nullable().optional().or(z.literal("")),
+  posterUrl: z.string().trim().max(500).nullable().optional().or(z.literal("")),
   releaseYear: z.coerce.number().int().min(1888).max(2200).nullable().optional(),
-  genre: z.string().max(300).optional(),
+  genre: z.array(genreItem).max(20).optional(),
+  watchedTogether: z.boolean().optional(),
   director: z.string().trim().max(120).optional(),
   durationMinutes: z.coerce.number().int().min(1).max(1000).nullable().optional(),
   watchedDate: z.string().optional(),
@@ -55,6 +58,15 @@ export const movieSchema = z.object({
   rating: z.coerce.number().min(0).max(10).nullable().optional(),
   tags: z.string().max(300).optional(),
   visibility: journalVisibility,
+  contentType: z.enum(["movie", "series", "season", "episode", "other"]).optional(),
+  customType: z.string().trim().max(80).optional(),
+  seriesId: z.string().trim().max(60).optional(),
+  seasonNumber: z.coerce.number().int().min(1).max(100).nullable().optional(),
+  episodeNumber: z.coerce.number().int().min(1).max(2000).nullable().optional(),
+  watchedWith: z.string().trim().max(80).optional(),
+  mood: z.string().trim().max(60).optional(),
+  images: z.array(imageRef).max(12).optional(),
+  reflection: z.string().trim().max(5000).optional(),
 });
 
 export const reflectionSchema = z.object({
@@ -64,6 +76,13 @@ export const reflectionSchema = z.object({
   favoriteCharacter: z.string().trim().max(300).optional(),
   lifeLesson: z.string().trim().max(1200).optional(),
   interpretation: z.string().trim().max(1600).optional(),
+  imageUrls: z.array(imageRef).max(12).optional(),
+  visibility: journalVisibility,
+});
+
+export const placeReflectionSchema = z.object({
+  body: z.string().trim().min(2).max(5000),
+  imageUrls: z.array(imageRef).max(12).optional(),
   visibility: journalVisibility,
 });
 
@@ -73,10 +92,12 @@ export const placeSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
   photoUrls: z.string().max(2000).optional(),
+  images: z.array(imageRef).max(12).optional(),
   visitedOn: z.string().optional(),
   notes: z.string().trim().max(2000).optional(),
   reflection: z.string().trim().max(3000).optional(),
   rating: z.coerce.number().min(0).max(10).nullable().optional(),
   category: z.enum(["nature", "restaurant", "tourist_attraction", "historical", "other"]),
+  visitedTogether: z.boolean().optional(),
   visibility: journalVisibility,
 });

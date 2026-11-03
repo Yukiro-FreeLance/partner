@@ -26,6 +26,74 @@ function client() {
   return OpenCode.make({ baseUrl: host, headers });
 }
 
+/** Marker label so the site settings UI only manages the credentials it created itself. */
+export const managedKeyLabel = (providerId: string) => `CoupleSync · ${providerId}`;
+
+const providerIdPattern = /^[a-z0-9][a-z0-9._-]{1,60}$/i;
+
+export type ProviderKey = { id: string; integrationId: string; type: "key" | "oauth" | "external"; label: string; active: boolean };
+
+/** All credentials OpenCode holds for the given providers (used by the settings page status row). */
+export async function providerCredentials(providerIds: string[]): Promise<ProviderKey[]> {
+  if (!enabled()) return [];
+  const opencode = client();
+  const credentials = ((await opencode.credential.list().catch(() => [])) || []).filter((credential) => providerIds.includes(credential.integrationID));
+  return credentials.map((credential) => ({
+    id: credential.id,
+    integrationId: credential.integrationID,
+    type: credential.value.type,
+    label: credential.label,
+    active: credential.active,
+  }));
+}
+
+/** Stores an API key for a provider on the OpenCode server, replacing the key this app manages for it. */
+export async function connectProviderKey(providerId: string, key: string): Promise<{ ok: boolean; error?: string }> {
+  if (!enabled()) return { ok: false, error: "OpenCode is not configured on this server." };
+  if (!providerIdPattern.test(providerId)) return { ok: false, error: `“${providerId}” is not a valid provider ID.` };
+  if (!key) return { ok: false, error: "Enter the API key to add." };
+  const opencode = client();
+  try {
+    const integration = ((await opencode.integration.list()).data ?? []).find((item) => item.id === providerId);
+    if (!integration) return { ok: false, error: `OpenCode does not know a provider called “${providerId}”.` };
+    if (!integration.methods.some((method) => method.type === "key")) {
+      return { ok: false, error: `“${integration.name ?? providerId}” does not accept an API key${integration.methods.length ? ` (its methods: ${integration.methods.map((method) => method.type).join(", ")})` : ""}.` };
+    }
+    const managedLabel = managedKeyLabel(providerId);
+    // Ids of keys this app stored earlier — they become stale the moment the new key is connected.
+    const knownKeyIds = (((await opencode.credential.list().catch(() => [])) || []).filter((credential) => credential.integrationID === providerId && credential.value.type === "key" && credential.label === managedLabel).map((credential) => credential.id));
+    await opencode.integration.connect.key({ integrationID: providerId, key, label: managedLabel });
+    // One key per provider: remove the earlier ones (the just-connected id is never in this list).
+    for (const credentialID of knownKeyIds) {
+      await opencode.credential.remove({ credentialID }).catch(() => undefined);
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "The API key could not be added to OpenCode." };
+  }
+}
+
+/** Removes only the API keys this app added for a provider (OAuth or manual keys it did not create stay). */
+export async function disconnectProviderKey(providerId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!enabled()) return { ok: false, error: "OpenCode is not configured on this server." };
+  if (!providerIdPattern.test(providerId)) return { ok: false, error: `“${providerId}” is not a valid provider ID.` };
+  const opencode = client();
+  try {
+    const managed = ((await opencode.credential.list().catch(() => [])) || []).filter((credential) => credential.integrationID === providerId && credential.value.type === "key" && credential.label === managedKeyLabel(providerId));
+    for (const credential of managed) {
+      try {
+        await opencode.credential.remove({ credentialID: credential.id });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        if (!/404|not found/i.test(message)) throw error;
+      }
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "The stored API key could not be removed." };
+  }
+}
+
 export async function listConversations(repo: Repository, userId: string) { return repo.list("aiConversations", { eq: { userId } }, { orderBy: "updatedAt", descending: true }); }
 
 export async function getConversation(repo: Repository, userId: string, id: string) {
@@ -90,6 +158,8 @@ export async function answer(
   const settings = await getSiteSettings();
   if (!settings.aiEnabled) throw new Error("The WenX chatbot is currently disabled by the administrator.");
   const assistantName = settings.aiName?.trim() || AI_NAME;
+  // "custom" points at any provider known to OpenCode, e.g. "deepseek" — set its ID in Site settings.
+  const providerID = settings.aiProvider === "custom" ? (settings.aiCustomProvider?.trim().toLowerCase() || "custom") : settings.aiProvider ?? "opencode";
   const clean = text.trim();
   if (!clean || clean.length > 4000) throw new Error("Message must be between 1 and 4000 characters.");
   requestLog.__coupleSyncAIRate ??= new Map();
@@ -102,12 +172,12 @@ export async function answer(
   const prompt = `${systemPrompt(assistantName, data)}\n\nRecent conversation:\n${history.reverse().map((message) => `${message.role}: ${message.content}`).join("\n")}\n\nUser: ${clean}`;
   const opencode = client();
   const model = settings.aiModel
-    ? { providerID: settings.aiProvider ?? "opencode", id: settings.aiModel }
-    : settings.aiProvider && settings.aiProvider !== "opencode"
-      ? (await opencode.model.list()).data.find((candidate) => candidate.providerID === settings.aiProvider && candidate.status === "active")
+    ? { providerID, id: settings.aiModel }
+    : providerID !== "opencode"
+      ? (await opencode.model.list()).data.find((candidate) => candidate.providerID === providerID && candidate.status === "active")
       : undefined;
-  if (settings.aiProvider && settings.aiProvider !== "opencode" && !model) {
-    throw new Error(`No active ${settings.aiProvider} model is configured in OpenCode. Set a model ID in Super Admin → Site settings.`);
+  if (providerID !== "opencode" && !model) {
+    throw new Error(`No active ${providerID} model is configured in OpenCode. Add the provider's API key and a model ID in Super Admin → Site settings.`);
   }
   let sessionId = conversation.opencodeSessionId;
   if (!sessionId) {
@@ -137,7 +207,7 @@ export async function answer(
   if (!streamed.length && response) onDelta?.(response);
   const stamp = now();
   await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "user", content: clean, metadata: null, createdAt: stamp });
-  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "assistant", content: response, metadata: { provider: settings.aiProvider ?? "opencode", model: settings.aiModel || null }, createdAt: stamp });
+  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "assistant", content: response, metadata: { provider: providerID, model: settings.aiModel || null }, createdAt: stamp });
   await repo.update("aiConversations", conversation.id, { title: conversation.title === "New conversation" ? clean.slice(0, 60) : conversation.title, updatedAt: stamp });
   return response;
 }

@@ -512,6 +512,7 @@ export type GameMatchSnapshot = {
 export type JournalVisibility = "private" | "partner" | "public";
 export type MovieWatchStatus = "watched" | "watching" | "want_to_watch";
 export type PlaceCategory = "nature" | "restaurant" | "tourist_attraction" | "historical" | "other";
+export type WatchContentType = "movie" | "series" | "season" | "episode" | "other";
 
 export type MovieEntry = {
   id: string;
@@ -525,6 +526,16 @@ export type MovieEntry = {
   durationMinutes: number | null;
   watchedDate: string | null;
   status: MovieWatchStatus;
+  contentType: WatchContentType;
+  customType: string | null;
+  seriesId: string | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  watchedWith: string | null;
+  mood: string | null;
+  images: string[];
+  /** Shared entries also appear in the partner's watch list, where they can add their own reflection. */
+  watchedTogether: boolean;
   rating: number | null;
   tags: string[];
   visibility: JournalVisibility;
@@ -537,6 +548,7 @@ export type MovieReflection = {
   movieId: string;
   userId: string;
   body: string;
+  imageUrls: string[];
   learned: string | null;
   memorableScene: string | null;
   favoriteCharacter: string | null;
@@ -558,8 +570,21 @@ export type VisitedPlace = {
   visitedOn: string | null;
   notes: string | null;
   reflection: string | null;
+  /** Shared visits also appear in the partner's places list, where they can add their own reflection. */
+  visitedTogether: boolean;
   rating: number | null;
   category: PlaceCategory;
+  visibility: JournalVisibility;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlaceReflection = {
+  id: string;
+  placeId: string;
+  userId: string;
+  body: string;
+  imageUrls: string[];
   visibility: JournalVisibility;
   createdAt: string;
   updatedAt: string;
@@ -671,6 +696,8 @@ export type SiteSettings = {
   aiName?: string;
   aiProvider?: AIProvider;
   aiModel?: string;
+  /** Provider ID used when aiProvider is "custom", e.g. "deepseek" or "moonshot". */
+  aiCustomProvider?: string;
   updatedAt: string;
 };
 
@@ -988,6 +1015,7 @@ export type Database = {
   gameMatches: GameMatch[];
   movieEntries: MovieEntry[];
   movieReflections: MovieReflection[];
+  placeReflections: PlaceReflection[];
   visitedPlaces: VisitedPlace[];
   aiConversations: AIConversation[];
   aiMessages: AIMessage[];

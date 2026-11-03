@@ -6,6 +6,8 @@ import type { Repository } from "@/lib/data/repository";
 import { readMediaFile } from "@/lib/media-files";
 import { activeMembership, requireMembership } from "@/lib/services/access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { entryImages } from "@/lib/watch";
+import type { PlaceReflection } from "@/lib/domain";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -29,7 +31,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       const attachment = await repo.find("memoryAttachments", { eq: { id } });
       const memory = attachment ? await repo.find("coupleMemories", { eq: { id: attachment.memoryId } }) : null;
       const sharedMemory = Boolean(memory && memory.visibility === "shared");
-      if (!sharedMemory && !(await planOwnsMedia(repo, media.coupleId, `/api/media/${media.id}`))) return new Response("Not found.", { status: 404 });
+      if (!sharedMemory && !(await filmUsesMedia(repo, media.ownerId, mediaUrl)) && !(await planOwnsMedia(repo, media.coupleId, mediaUrl))) return new Response("Not found.", { status: 404 });
     }
   }
   const remote = isSupabaseConfigured() && !media.storagePath.startsWith("couplesync/") && !path.isAbsolute(media.storagePath);
@@ -41,6 +43,17 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const bytes = await readMediaFile(media.storagePath);
   if (!bytes) return new Response("File unavailable.", { status: 404 });
   return new Response(new Uint8Array(bytes), { headers: { "Content-Type": media.contentType, "Cache-Control": "private, no-store" } });
+}
+
+/** Watch-journal covers, galleries and reflection images stay visible to the partner of the member who uploaded them — including place photos and reflections. */
+async function filmUsesMedia(repo: Repository, ownerId: string, mediaUrl: string) {
+  const [entries, reflections, places, placeReflections] = await Promise.all([
+    repo.list("movieEntries", { eq: { userId: ownerId } }),
+    repo.list("movieReflections", { eq: { userId: ownerId } }),
+    repo.list("visitedPlaces", { eq: { userId: ownerId } }),
+    repo.list("placeReflections", { eq: { userId: ownerId } }).catch(() => [] as PlaceReflection[]),
+  ]);
+  return entries.some((entry) => entryImages(entry.images).includes(mediaUrl)) || reflections.some((reflection) => entryImages(reflection.imageUrls).includes(mediaUrl)) || places.some((place) => entryImages(place.photoUrls).includes(mediaUrl)) || placeReflections.some((reflection) => entryImages(reflection.imageUrls).includes(mediaUrl));
 }
 
 async function planOwnsMedia(repo: Repository, coupleId: string, mediaUrl: string) {

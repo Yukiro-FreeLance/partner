@@ -12,16 +12,18 @@ import { loginAccount, provisionAccount, registerAccount, requestPasswordReset, 
 import { clearImpersonationCookie, clearSessionCookie, consumePairPath, defaultPreferences, forgetAppSession, getCurrentUser, isStaffRole, readEffectiveUserId, rememberPairPath, requireUser, safePairPath, setImpersonationCookie, setSessionCookie } from "@/lib/auth/session";
 import { DEMO_JORDAN_EMAIL, DEMO_MAYA_EMAIL, resetDemo } from "@/lib/demo/seed";
 import { createId } from "@/lib/ids";
-import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, movieSchema, placeSchema, reflectionSchema, registerSchema, resetSchema } from "@/lib/validators";
+import { contactSchema, coupleSchema, genderSchema, loginSchema, memorySchema, movieSchema, placeReflectionSchema, placeSchema, reflectionSchema, registerSchema, resetSchema } from "@/lib/validators";
 import { pauseCycleSharing } from "@/lib/services/cycle";
 import { acceptInvitation, createCouple, createInvitation, invitationKey, leaveCouple, regenerateInvitation, requestReconnect, respondReconnect, revokeInvitation } from "@/lib/services/couples";
 import { completeQuiz, getOrCreateDaily, getOrCreateIntimacyDaily, saveQuizBatch, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { activeMembership, couplePartners, writeAudit } from "@/lib/services/access";
 import { isAIProvider, saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
+import { connectProviderKey, disconnectProviderKey } from "@/lib/services/ai";
 import { addReflection, adminStats, blockUser, createCustomCard, createCustomQuestion, createMemory, deleteAccount, deleteMemory, fileReport, markSimilarity, reviewReport, saveAdminQuestion, saveCardState, updateMemory } from "@/lib/services/life";
-import { addMovieReflection, cleanList, createMovie, createPlace, deleteMovie, deletePlace, deleteReflection, updateMovie } from "@/lib/services/journal";
-import type { AnswerPayload, QuizMode } from "@/lib/domain";
+import { addMovieReflection, addPlaceReflection, cleanList, createMovie, createPlace, deleteMovie, deletePlace, deletePlaceReflection, deleteReflection, updateMovie } from "@/lib/services/journal";
+import type { AnswerPayload, MovieEntry, MovieReflection, QuizMode, WatchContentType } from "@/lib/domain";
+import { fallbackTitle } from "@/lib/watch";
 import { createClient } from "@/lib/supabase/server";
 
 export type FormState = { error?: string; message?: string; link?: string };
@@ -468,20 +470,66 @@ export async function intimacyDailyAction(formData: FormData) {
   redirect(`/play/quiz/${daily.data.session.id}`);
 }
 
+function watchImagesFromForm(formData: FormData) {
+  return formData.getAll("image").map(String).map((value) => value.trim()).filter((value) => value.startsWith("/api/media/") && !value.includes("../"));
+}
+
+function placeImagesFromForm(formData: FormData) {
+  return formData.getAll("place-image").map(String).map((value) => value.trim()).filter((value) => value.startsWith("/api/media/") && !value.includes("../"));
+}
+
 export async function movieAction(_state: FormState, formData: FormData) {
   const user = await requireUser();
   const parsed = movieSchema.safeParse({
-    title: formString(formData, "title"), tmdbId: optionalNumber(formData, "tmdbId"), posterUrl: formString(formData, "posterUrl") || null,
-    releaseYear: optionalNumber(formData, "releaseYear"), genre: formString(formData, "genre"), director: formString(formData, "director"),
+    title: formString(formData, "title"), tmdbId: optionalNumber(formData, "tmdbId"), posterUrl: formString(formData, "posterUrl"),
+    releaseYear: optionalNumber(formData, "releaseYear"), genre: formData.getAll("genre").map(String), watchedTogether: formData.get("watchedTogether") === "on",
+    director: formString(formData, "director"),
     durationMinutes: optionalNumber(formData, "durationMinutes"), watchedDate: formString(formData, "watchedDate"), status: formString(formData, "status"),
     rating: optionalNumber(formData, "rating"), tags: formString(formData, "tags"), visibility: formString(formData, "visibility"),
+    contentType: formString(formData, "contentType"), customType: formString(formData, "customType"), seriesId: formString(formData, "seriesId"),
+    seasonNumber: optionalNumber(formData, "seasonNumber"), episodeNumber: optionalNumber(formData, "episodeNumber"),
+    watchedWith: formString(formData, "watchedWith"), mood: formString(formData, "mood"), images: watchImagesFromForm(formData),
+    reflection: formString(formData, "reflection"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the movie details." };
+  const data = parsed.data;
+  const contentType: WatchContentType = data.contentType ?? "movie";
+  const title = data.title?.trim() ?? "";
+  if (!title && (contentType === "movie" || contentType === "series")) return { error: "Give it a title." };
+  const isChild = contentType === "season" || contentType === "episode";
+  const posterUrl = data.posterUrl && /^(https?:\/\/|\/api\/media\/)/.test(data.posterUrl) ? data.posterUrl : null;
+  const customType = contentType === "other" ? data.customType?.trim() || null : null;
+  const input: Omit<MovieEntry, "id" | "userId" | "createdAt" | "updatedAt"> = {
+    title: title || fallbackTitle(contentType, { seasonNumber: data.seasonNumber ?? null, episodeNumber: data.episodeNumber ?? null, customType }),
+    tmdbId: isChild ? null : data.tmdbId ?? null,
+    posterUrl,
+    releaseYear: data.releaseYear ?? null,
+    genre: (data.genre ?? []).map((name) => name.trim()).filter(Boolean).slice(0, 20),
+    director: data.director || null,
+    durationMinutes: data.durationMinutes ?? null,
+    watchedDate: data.watchedDate || null,
+    status: data.status,
+    contentType,
+    customType,
+    seriesId: isChild && data.seriesId ? data.seriesId : null,
+    seasonNumber: isChild ? data.seasonNumber ?? null : null,
+    episodeNumber: contentType === "episode" ? data.episodeNumber ?? null : null,
+    watchedWith: data.watchedWith?.trim() || null,
+    mood: data.mood?.trim() || null,
+    images: (data.images ?? []).slice(0, 12),
+    watchedTogether: Boolean(data.watchedTogether) && !isChild,
+    rating: data.rating ?? null,
+    tags: cleanList(data.tags),
+    visibility: data.visibility,
+  };
   const repo = await getRepository();
-  const input = { ...parsed.data, tmdbId: parsed.data.tmdbId ?? null, posterUrl: parsed.data.posterUrl || null, releaseYear: parsed.data.releaseYear ?? null, genre: cleanList(parsed.data.genre), director: parsed.data.director || null, durationMinutes: parsed.data.durationMinutes ?? null, watchedDate: parsed.data.watchedDate || null, rating: parsed.data.rating ?? null, tags: cleanList(parsed.data.tags), visibility: parsed.data.visibility };
   const id = formString(formData, "movieId");
   const saved = id ? await updateMovie(repo, user.profile.id, id, input) : await createMovie(repo, user.profile.id, input);
   if (!saved.ok) return { error: saved.error };
+  if (!id && data.reflection?.trim()) {
+    const reflection: Omit<MovieReflection, "id" | "movieId" | "userId" | "createdAt" | "updatedAt"> = { body: data.reflection.trim(), learned: null, memorableScene: null, favoriteCharacter: null, lifeLesson: null, interpretation: null, imageUrls: [], visibility: data.visibility };
+    await addMovieReflection(repo, user.profile.id, saved.data.id, reflection);
+  }
   redirect(`/journal/movies/${saved.data.id}`);
 }
 
@@ -493,9 +541,9 @@ export async function deleteMovieAction(formData: FormData) {
 
 export async function movieReflectionAction(_state: FormState, formData: FormData) {
   const user = await requireUser();
-  const parsed = reflectionSchema.safeParse({ body: formString(formData, "body"), learned: formString(formData, "learned"), memorableScene: formString(formData, "memorableScene"), favoriteCharacter: formString(formData, "favoriteCharacter"), lifeLesson: formString(formData, "lifeLesson"), interpretation: formString(formData, "interpretation"), visibility: formString(formData, "visibility") });
+  const parsed = reflectionSchema.safeParse({ body: formString(formData, "body"), learned: formString(formData, "learned"), memorableScene: formString(formData, "memorableScene"), favoriteCharacter: formString(formData, "favoriteCharacter"), lifeLesson: formString(formData, "lifeLesson"), interpretation: formString(formData, "interpretation"), imageUrls: watchImagesFromForm(formData), visibility: formString(formData, "visibility") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the reflection." };
-  const saved = await addMovieReflection(await getRepository(), user.profile.id, formString(formData, "movieId"), { ...parsed.data, learned: parsed.data.learned || null, memorableScene: parsed.data.memorableScene || null, favoriteCharacter: parsed.data.favoriteCharacter || null, lifeLesson: parsed.data.lifeLesson || null, interpretation: parsed.data.interpretation || null });
+  const saved = await addMovieReflection(await getRepository(), user.profile.id, formString(formData, "movieId"), { ...parsed.data, learned: parsed.data.learned || null, memorableScene: parsed.data.memorableScene || null, favoriteCharacter: parsed.data.favoriteCharacter || null, lifeLesson: parsed.data.lifeLesson || null, interpretation: parsed.data.interpretation || null, imageUrls: (parsed.data.imageUrls ?? []).slice(0, 12) });
   if (!saved.ok) return { error: saved.error };
   redirect(`/journal/movies/${formString(formData, "movieId")}`);
 }
@@ -508,9 +556,10 @@ export async function deleteReflectionAction(formData: FormData) {
 
 export async function placeAction(_state: FormState, formData: FormData) {
   const user = await requireUser();
-  const parsed = placeSchema.safeParse({ name: formString(formData, "name"), address: formString(formData, "address"), latitude: optionalNumber(formData, "latitude"), longitude: optionalNumber(formData, "longitude"), photoUrls: formString(formData, "photoUrls"), visitedOn: formString(formData, "visitedOn"), notes: formString(formData, "notes"), reflection: formString(formData, "reflection"), rating: optionalNumber(formData, "rating"), category: formString(formData, "category"), visibility: formString(formData, "visibility") });
+  const parsed = placeSchema.safeParse({ name: formString(formData, "name"), address: formString(formData, "address"), latitude: optionalNumber(formData, "latitude"), longitude: optionalNumber(formData, "longitude"), photoUrls: formString(formData, "photoUrls"), images: placeImagesFromForm(formData), visitedOn: formString(formData, "visitedOn"), notes: formString(formData, "notes"), reflection: formString(formData, "reflection"), rating: optionalNumber(formData, "rating"), category: formString(formData, "category"), visitedTogether: formData.get("visitedTogether") === "on", visibility: formString(formData, "visibility") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the place details." };
-  const saved = await createPlace(await getRepository(), user.profile.id, { ...parsed.data, address: parsed.data.address || null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, photoUrls: cleanList(parsed.data.photoUrls), visitedOn: parsed.data.visitedOn || null, notes: parsed.data.notes || null, reflection: parsed.data.reflection || null, rating: parsed.data.rating ?? null });
+  const photoUrls = [...placeImagesFromForm(formData), ...cleanList(parsed.data.photoUrls)].slice(0, 12);
+  const saved = await createPlace(await getRepository(), user.profile.id, { ...parsed.data, address: parsed.data.address || null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, photoUrls, visitedOn: parsed.data.visitedOn || null, notes: parsed.data.notes || null, reflection: parsed.data.reflection || null, rating: parsed.data.rating ?? null, visitedTogether: Boolean(parsed.data.visitedTogether) });
   if (!saved.ok) return { error: saved.error };
   redirect("/journal");
 }
@@ -519,6 +568,23 @@ export async function deletePlaceAction(formData: FormData) {
   const user = await requireUser();
   await deletePlace(await getRepository(), user.profile.id, formString(formData, "placeId"));
   redirect("/journal");
+}
+
+export async function placeReflectionAction(_state: FormState, formData: FormData) {
+  const user = await requireUser();
+  const parsed = placeReflectionSchema.safeParse({ body: formString(formData, "body"), imageUrls: watchImagesFromForm(formData), visibility: formString(formData, "visibility") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the reflection." };
+  const placeId = formString(formData, "placeId");
+  const saved = await addPlaceReflection(await getRepository(), user.profile.id, placeId, { ...parsed.data, imageUrls: (parsed.data.imageUrls ?? []).slice(0, 12) });
+  if (!saved.ok) return { error: saved.error };
+  redirect(`/journal/places/${placeId}`);
+}
+
+export async function deletePlaceReflectionAction(formData: FormData) {
+  const user = await requireUser();
+  const placeId = formString(formData, "placeId");
+  await deletePlaceReflection(await getRepository(), user.profile.id, formString(formData, "placeReflectionId"));
+  redirect(`/journal/places/${placeId}`);
 }
 
 export async function cardAction(formData: FormData) {
@@ -847,13 +913,35 @@ export async function siteSettingsAction(formData: FormData) {
   const rawAIProvider = formString(formData, "aiProvider").trim();
   const aiProvider = isAIProvider(rawAIProvider) ? rawAIProvider : "opencode";
   const aiModel = formString(formData, "aiModel").trim().slice(0, 160);
+  const aiCustomProvider = formString(formData, "aiCustomProvider").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 60);
   if (!siteName || !title || !description) redirect("/admin/settings?error=Add%20a%20site%20name%2C%20title%2C%20and%20description.");
   const repo = await getRepository();
   try {
-    await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor, aiEnabled: formData.get("aiEnabled") === "on", aiName, aiProvider, aiModel });
+    await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor, aiEnabled: formData.get("aiEnabled") === "on", aiName, aiProvider, aiModel, aiCustomProvider });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Site settings could not be saved.";
     redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
+  }
+  // Provider API keys are stored only on the OpenCode server, never in the database: a key entered here
+  // is connected as an active credential so every model of that provider can be selected.
+  const keyFields: Array<{ integration: string; key: string; remove: string }> = [
+    { integration: "openrouter", key: "aiKeyOpenRouter", remove: "aiRemoveKeyOpenRouter" },
+    { integration: "openai", key: "aiKeyOpenAI", remove: "aiRemoveKeyOpenAI" },
+    { integration: "anthropic", key: "aiKeyAnthropic", remove: "aiRemoveKeyAnthropic" },
+    { integration: "google", key: "aiKeyGoogle", remove: "aiRemoveKeyGoogle" },
+  ];
+  if (aiCustomProvider) keyFields.push({ integration: aiCustomProvider, key: "aiKeyCustom", remove: "aiRemoveKeyCustom" });
+  const warnings: string[] = [];
+  try {
+    for (const field of keyFields) {
+      const key = formString(formData, field.key).trim().slice(0, 300);
+      const remove = formData.get(field.remove) === "on";
+      if (!key && !remove) continue;
+      const cleared = key ? await connectProviderKey(field.integration, key) : await disconnectProviderKey(field.integration);
+      if (!cleared.ok) warnings.push(`${field.integration}: ${cleared.error}`);
+    }
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : "The provider API keys could not be updated.");
   }
   for (const kind of ["favicon", "apple", "icon", "og"] as const) {
     const file = formData.get(kind);
@@ -865,7 +953,7 @@ export async function siteSettingsAction(formData: FormData) {
   revalidatePath("/", "layout");
   revalidatePath("/favicon.ico");
   revalidatePath("/admin/settings");
-  redirect("/admin/settings?saved=1");
+  redirect(`/admin/settings?saved=1${warnings.length ? `&warn=${encodeURIComponent(warnings.join(" "))}` : ""}`);
 }
 
 export async function loadAdminStats() {
