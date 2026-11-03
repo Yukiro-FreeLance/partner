@@ -2,7 +2,7 @@ import { siteSettingsAction } from "@/app/actions";
 import { PendingButton } from "@/components/pending-button";
 import { Input, Label } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth/session";
-import { loadSiteSettings, siteAssetUrl } from "@/lib/site-settings";
+import { aiProviders, loadSiteSettings, siteAssetUrl } from "@/lib/site-settings";
 
 export const metadata = { title: "Site settings" };
 
@@ -55,6 +55,14 @@ export default async function SiteSettingsPage({ searchParams }: { searchParams:
               );
             })}
           </div>
+        </section>
+        <section className="grid gap-4 rounded-[1.75rem] bg-white p-5 shadow-[var(--shadow)] lg:grid-cols-3">
+          <div className="lg:col-span-3"><h2 className="font-serif text-2xl">WenX chatbot</h2><p className="mt-1 text-sm text-muted-foreground">Choose the AI provider and model used by the server-side chatbot. API keys stay in server environment variables and are never stored here.</p></div>
+          <label className="flex items-start gap-3 text-sm lg:col-span-3"><input name="aiEnabled" type="checkbox" defaultChecked={settings.aiEnabled} className="mt-1 size-4" /><span><strong>Enable chatbot</strong><br /><span className="text-muted-foreground">Allow authenticated users to use WenX.</span></span></label>
+          <label className="grid gap-2 text-sm"><Label htmlFor="aiName">Chatbot name</Label><Input id="aiName" name="aiName" maxLength={40} defaultValue={settings.aiName} /></label>
+          <label className="grid gap-2 text-sm"><Label htmlFor="aiProvider">Provider</Label><select id="aiProvider" name="aiProvider" defaultValue={settings.aiProvider} className="h-11 rounded-xl border bg-white px-3 text-sm">{aiProviders.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}</select></label>
+          <label className="grid gap-2 text-sm"><Label htmlFor="aiModel">Model ID <span className="text-muted-foreground">(optional)</span></Label><Input id="aiModel" name="aiModel" maxLength={160} defaultValue={settings.aiModel} placeholder="e.g. openai/gpt-4o-mini" /></label>
+          <p className="text-xs text-muted-foreground lg:col-span-3">Provider credentials and OpenCode configuration are server-only. For OpenRouter, configure the provider and API key in OpenCode, then enter the model ID here.</p>
         </section>
         <PendingButton disabled={loaded.status === "unavailable"} pendingLabel="Saving site settings…">Save site settings</PendingButton>
       </form>

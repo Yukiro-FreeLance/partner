@@ -1,7 +1,7 @@
 import "server-only";
 import { readFile } from "fs/promises";
 import path from "path";
-import type { SiteAssetKind, SiteSettings } from "@/lib/domain";
+import type { AIProvider, SiteAssetKind, SiteSettings } from "@/lib/domain";
 import { getRepository } from "@/lib/data";
 import { readManagedFile, storeManagedBytes } from "@/lib/media-files";
 
@@ -26,10 +26,30 @@ export const defaultSiteSettings: SiteSettings = {
   ogImagePath: null,
   ogImageType: null,
   ogImageData: null,
+  aiEnabled: true,
+  aiName: "WenX",
+  aiProvider: "opencode",
+  aiModel: "",
   updatedAt: "",
 };
 
-const assetFields: Record<SiteAssetKind, { path: keyof SiteSettings; type: keyof SiteSettings; data: keyof SiteSettings }> = {
+export const aiProviders: { value: AIProvider; label: string; help: string }[] = [
+  { value: "opencode", label: "OpenCode", help: "Use the OpenCode provider configured on the server." },
+  { value: "openrouter", label: "OpenRouter", help: "Use an OpenRouter model configured in OpenCode." },
+  { value: "openai", label: "OpenAI", help: "Use an OpenAI model configured in OpenCode." },
+  { value: "anthropic", label: "Anthropic", help: "Use an Anthropic model configured in OpenCode." },
+  { value: "google", label: "Google Gemini", help: "Use a Gemini model configured in OpenCode." },
+  { value: "custom", label: "Custom provider", help: "Use a provider ID configured in OpenCode." },
+];
+
+export function isAIProvider(value: string): value is AIProvider {
+  return aiProviders.some((provider) => provider.value === value);
+}
+
+type AssetPath = "faviconPath" | "appleIconPath" | "iconPath" | "ogImagePath";
+type AssetType = "faviconType" | "appleIconType" | "iconType" | "ogImageType";
+type AssetData = "faviconData" | "appleIconData" | "iconData" | "ogImageData";
+const assetFields: Record<SiteAssetKind, { path: AssetPath; type: AssetType; data: AssetData }> = {
   favicon: { path: "faviconPath", type: "faviconType", data: "faviconData" },
   apple: { path: "appleIconPath", type: "appleIconType", data: "appleIconData" },
   icon: { path: "iconPath", type: "iconType", data: "iconData" },

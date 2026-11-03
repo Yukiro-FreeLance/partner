@@ -565,6 +565,26 @@ export type VisitedPlace = {
   updatedAt: string;
 };
 
+export type AIConversation = {
+  id: string;
+  userId: string;
+  coupleId: string | null;
+  title: string;
+  opencodeSessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AIMessage = {
+  id: string;
+  conversationId: string;
+  userId: string;
+  role: "user" | "assistant";
+  content: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
 export type GameMatch = {
   id: string;
   coupleId: string;
@@ -624,6 +644,7 @@ export type SupportMessage = {
 };
 
 export type SiteAssetKind = "favicon" | "apple" | "icon" | "og";
+export type AIProvider = "opencode" | "openrouter" | "openai" | "anthropic" | "google" | "custom";
 
 export type SiteSettings = {
   id: string;
@@ -646,6 +667,10 @@ export type SiteSettings = {
   ogImagePath: string | null;
   ogImageType: string | null;
   ogImageData: string | null;
+  aiEnabled?: boolean;
+  aiName?: string;
+  aiProvider?: AIProvider;
+  aiModel?: string;
   updatedAt: string;
 };
 
@@ -964,6 +989,8 @@ export type Database = {
   movieEntries: MovieEntry[];
   movieReflections: MovieReflection[];
   visitedPlaces: VisitedPlace[];
+  aiConversations: AIConversation[];
+  aiMessages: AIMessage[];
 };
 
 export type TableName = keyof Database;

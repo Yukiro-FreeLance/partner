@@ -65,6 +65,8 @@ export function emptyDatabase(): Database {
     movieEntries: [],
     movieReflections: [],
     visitedPlaces: [],
+    aiConversations: [],
+    aiMessages: [],
   };
 }
 

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, BookHeart, Brain, CalendarHeart, ChevronDown, Gamepad2, Heart, House, ImageIcon, Shield, Ticket, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { DashboardSearch } from "@/components/dashboard-search";
+import { AIChatbot } from "@/components/ai-chatbot";
 import { Avatar } from "@/components/ui/feedback";
 import { PwaClient } from "@/components/pwa-client";
 import { ChallengeInviteModal, type ChallengeInvite } from "@/components/challenge-invite-modal";
@@ -23,7 +24,7 @@ const playLinks = [
   { href: "/play/library", label: "Question Library" },
 ];
 
-export function AppShell({ children, name, avatarUrl, demo, unread, locale, impersonating = false, superAdmin = false, tracksCycle = false }: { children: React.ReactNode; name: string; avatarUrl: string | null; demo: boolean; unread: number; locale: string; impersonating?: boolean; superAdmin?: boolean; tracksCycle?: boolean }) {
+export function AppShell({ children, name, avatarUrl, demo, unread, locale, impersonating = false, superAdmin = false, tracksCycle = false, assistantName = "WenX" }: { children: React.ReactNode; name: string; avatarUrl: string | null; demo: boolean; unread: number; locale: string; impersonating?: boolean; superAdmin?: boolean; tracksCycle?: boolean; assistantName?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const copy = navigationCopy(locale);
@@ -170,6 +171,7 @@ export function AppShell({ children, name, avatarUrl, demo, unread, locale, impe
       {phone && <PwaClient />}
         {challengeInvite && <ChallengeInviteModal invite={challengeInvite} onClose={() => setChallengeInvite(null)} onRespond={(response) => void respondToChallenge(response)} />}
         <div id="content" className={cn(phone && "safe-pb")}>{children}</div>
+        {phone && <AIChatbot name={assistantName} />}
       </div>
       {phone && (
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1 pt-1 backdrop-blur lg:hidden" style={{ paddingBottom: "max(0.4rem, env(safe-area-inset-bottom))" }} aria-label="App">

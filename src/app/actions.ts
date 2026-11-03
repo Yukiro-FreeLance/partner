@@ -18,7 +18,7 @@ import { acceptInvitation, createCouple, createInvitation, invitationKey, leaveC
 import { completeQuiz, getOrCreateDaily, getOrCreateIntimacyDaily, saveQuizBatch, saveQuizProgress, shareSoloResults, startQuiz } from "@/lib/services/quiz";
 import { completePersonality, savePersonalityAnswer, setPersonalityShared, startPersonality } from "@/lib/services/personality";
 import { activeMembership, couplePartners, writeAudit } from "@/lib/services/access";
-import { saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
+import { isAIProvider, saveSiteSettings, storeSiteAsset } from "@/lib/site-settings";
 import { addReflection, adminStats, blockUser, createCustomCard, createCustomQuestion, createMemory, deleteAccount, deleteMemory, fileReport, markSimilarity, reviewReport, saveAdminQuestion, saveCardState, updateMemory } from "@/lib/services/life";
 import { addMovieReflection, cleanList, createMovie, createPlace, deleteMovie, deletePlace, deleteReflection, updateMovie } from "@/lib/services/journal";
 import type { AnswerPayload, QuizMode } from "@/lib/domain";
@@ -843,10 +843,14 @@ export async function siteSettingsAction(formData: FormData) {
   const ogDescription = formString(formData, "ogDescription").trim().slice(0, 300);
   const keywords = formString(formData, "keywords").trim().slice(0, 240);
   const themeColor = /^#[0-9a-fA-F]{6}$/.test(formString(formData, "themeColor").trim()) ? formString(formData, "themeColor").trim() : "#6d28d9";
+  const aiName = formString(formData, "aiName").trim().slice(0, 40) || "WenX";
+  const rawAIProvider = formString(formData, "aiProvider").trim();
+  const aiProvider = isAIProvider(rawAIProvider) ? rawAIProvider : "opencode";
+  const aiModel = formString(formData, "aiModel").trim().slice(0, 160);
   if (!siteName || !title || !description) redirect("/admin/settings?error=Add%20a%20site%20name%2C%20title%2C%20and%20description.");
   const repo = await getRepository();
   try {
-    await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor });
+    await saveSiteSettings({ siteName, title, description, ogTitle: ogTitle || title, ogDescription: ogDescription || description, keywords, themeColor, aiEnabled: formData.get("aiEnabled") === "on", aiName, aiProvider, aiModel });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Site settings could not be saved.";
     redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
