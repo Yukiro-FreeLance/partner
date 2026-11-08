@@ -77,6 +77,23 @@
 
 html { scroll-behavior: smooth; }
 
+html, body, * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-track { background: transparent; }
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  border-radius: 999px;
+}
+
 body {
   background:
     radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--blush) 70%, transparent), transparent 60%),

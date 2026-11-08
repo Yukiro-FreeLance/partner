@@ -7,7 +7,7 @@ export function ConfirmSubmit({ action, fields, label, title, description }: { a
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px] sm:h-9 sm:px-3 sm:text-xs">{label}</Button>
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]">{label}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogTitle className="font-serif text-2xl">{title}</AlertDialogTitle>

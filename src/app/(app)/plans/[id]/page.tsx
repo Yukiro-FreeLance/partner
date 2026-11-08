@@ -7,7 +7,7 @@ import { loadDatePlan } from "@/lib/services/plans";
 
 export const metadata = { title: "Itinerary" };
 
-export default async function PlanPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string; saved?: string; error?: string }> }) {
+export default async function PlanPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string; saved?: string; error?: string; day?: string; span?: string }> }) {
   const user = await requireUser();
   const { id } = await params;
   const query = await searchParams;
@@ -22,7 +22,7 @@ export default async function PlanPage({ params, searchParams }: { params: Promi
         </main>
       );
     }
-    return <PlanScreen detail={loaded.data} view={query.view ?? "timeline"} saved={query.saved} error={query.error} viewerId={user.profile.id} />;
+    return <PlanScreen detail={loaded.data} view={query.view ?? "timeline"} saved={query.saved} error={query.error} viewerId={user.profile.id} day={query.day} span={query.span} />;
   } catch (error) {
     if (!isMissingPlanTable(error)) throw error;
     return <main className="px-4 py-6 lg:px-8"><h1 className="font-serif text-4xl">Date plans</h1><p className="mt-2 text-sm text-muted-foreground">Apply the latest database migration, then reload this page.</p></main>;

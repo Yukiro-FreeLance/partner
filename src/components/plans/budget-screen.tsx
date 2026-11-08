@@ -87,7 +87,7 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
           <ExpenseForm planId={plan.id} currency={plan.currency} days={days} activities={activities} partners={detail.partners} returnTo={`/plans/${plan.id}/budget`} />
         </div>
       </section>
-      <div className="fixed inset-x-3 bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4.25rem))] z-30 lg:inset-x-auto lg:right-4 lg:bottom-6 lg:w-auto">
+      <div className="fixed bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4.25rem))] left-3 right-20 z-30 lg:bottom-[6.5rem] lg:left-auto lg:right-7 lg:w-auto">
         <a href="#add-expense" className="inline-flex h-8 w-full items-center justify-center rounded-full bg-primary px-3 text-xs text-primary-foreground shadow-[var(--shadow)] sm:h-11 sm:text-sm lg:w-auto">Add expense</a>
       </div>
     </main>

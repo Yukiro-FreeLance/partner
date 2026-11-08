@@ -67,6 +67,39 @@ export function formatMoney(amount: number, currency: string) {
   }
 }
 
+export function formatClock(value: string | null | undefined) {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim());
+  if (!match) return value;
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  if (!Number.isInteger(hours) || hours > 23 || !minutes) return value;
+  const suffix = hours >= 12 ? "PM" : "AM";
+  return `${hours % 12 || 12}:${minutes} ${suffix}`;
+}
+
+export function formatClockRange(start: string | null, end: string | null) {
+  const from = formatClock(start);
+  const to = formatClock(end);
+  if (from && to) {
+    const fromPeriod = from.slice(-2);
+    const toPeriod = to.slice(-2);
+    if (fromPeriod === toPeriod) return `${from.slice(0, -3)}–${to}`;
+    return `${from}–${to}`;
+  }
+  return from ?? to ?? "Anytime";
+}
+
+export function clockSession(start: string | null, end: string | null) {
+  const clock = start ?? end;
+  if (!clock) return "Anytime" as const;
+  const match = /^(\d{1,2}):/.exec(clock.trim());
+  if (!match) return "Anytime" as const;
+  const hours = Number(match[1]);
+  if (!Number.isInteger(hours) || hours > 23) return "Anytime" as const;
+  return (hours < 12 ? "AM" : "PM") as "AM" | "PM";
+}
+
 export function formatPlanRange(start: string, end: string) {
   const from = parseISO(start);
   const to = parseISO(end);
