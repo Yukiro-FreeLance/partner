@@ -15,7 +15,25 @@ const requestLog = globalThis as { __coupleSyncAIRate?: Map<string, number[]> };
 export const AI_NAME = "WenX";
 export const AI_WELCOME = "Hi! I'm WenX, your CoupleSync relationship companion. ❤️\n\nI'm here to help you discover meaningful experiences, reflect on your memories, plan special dates, and make every moment together more memorable.\n\nWhat would you like to talk about today?";
 
-function enabled() { return process.env.OPENCODE_ENABLED === "true" && Boolean(process.env.OPENCODE_HOST); }
+function firstEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+}
+
+function opencodeEnabled() {
+  return process.env.OPENCODE_ENABLED === "true" && Boolean(process.env.OPENCODE_HOST);
+}
+
+function geminiApiKey() {
+  return firstEnv("GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY");
+}
+
+/** True when WenX can answer: OpenCode is up, or a Gemini API key is present for direct Google mode. */
+export function aiRuntimeConfigured() {
+  return opencodeEnabled() || Boolean(geminiApiKey());
+}
 
 function client() {
   const host = process.env.OPENCODE_HOST;
@@ -35,21 +53,31 @@ export type ProviderKey = { id: string; integrationId: string; type: "key" | "oa
 
 /** All credentials OpenCode holds for the given providers (used by the settings page status row). */
 export async function providerCredentials(providerIds: string[]): Promise<ProviderKey[]> {
-  if (!enabled()) return [];
-  const opencode = client();
-  const credentials = ((await opencode.credential.list().catch(() => [])) || []).filter((credential) => providerIds.includes(credential.integrationID));
-  return credentials.map((credential) => ({
-    id: credential.id,
-    integrationId: credential.integrationID,
-    type: credential.value.type,
-    label: credential.label,
-    active: credential.active,
-  }));
+  if (opencodeEnabled()) {
+    const opencode = client();
+    const credentials = ((await opencode.credential.list().catch(() => [])) || []).filter((credential) => providerIds.includes(credential.integrationID));
+    return credentials.map((credential) => ({
+      id: credential.id,
+      integrationId: credential.integrationID,
+      type: credential.value.type,
+      label: credential.label,
+      active: credential.active,
+    }));
+  }
+  if (providerIds.includes("google") && geminiApiKey()) {
+    return [{ id: "env-gemini", integrationId: "google", type: "key", label: "Server GEMINI_API_KEY", active: true }];
+  }
+  return [];
 }
 
 /** Stores an API key for a provider on the OpenCode server, replacing the key this app manages for it. */
 export async function connectProviderKey(providerId: string, key: string): Promise<{ ok: boolean; error?: string }> {
-  if (!enabled()) return { ok: false, error: "OpenCode is not configured on this server." };
+  if (!opencodeEnabled()) {
+    if (providerId === "google") {
+      return { ok: false, error: "OpenCode is not running. Set GEMINI_API_KEY in the server environment instead of pasting a key here." };
+    }
+    return { ok: false, error: "OpenCode is not configured on this server." };
+  }
   if (!providerIdPattern.test(providerId)) return { ok: false, error: `“${providerId}” is not a valid provider ID.` };
   if (!key) return { ok: false, error: "Enter the API key to add." };
   const opencode = client();
@@ -75,7 +103,12 @@ export async function connectProviderKey(providerId: string, key: string): Promi
 
 /** Removes only the API keys this app added for a provider (OAuth or manual keys it did not create stay). */
 export async function disconnectProviderKey(providerId: string): Promise<{ ok: boolean; error?: string }> {
-  if (!enabled()) return { ok: false, error: "OpenCode is not configured on this server." };
+  if (!opencodeEnabled()) {
+    if (providerId === "google") {
+      return { ok: false, error: "Google Gemini uses GEMINI_API_KEY from the server environment. Remove it there to disconnect." };
+    }
+    return { ok: false, error: "OpenCode is not configured on this server." };
+  }
   if (!providerIdPattern.test(providerId)) return { ok: false, error: `“${providerId}” is not a valid provider ID.` };
   const opencode = client();
   try {
@@ -147,32 +180,121 @@ function systemPrompt(name: string, data: unknown) {
   return `You are ${name}, a warm and emotionally intelligent relationship companion. You are not a therapist or licensed professional. Be supportive, practical, non-judgmental, and concise. Never invent memories, dates, ratings, places, or preferences: use only the CoupleSync context below and say when something is not recorded. Do not expose private implementation details, credentials, or raw identifiers. Do not modify records. For abuse, threats, self-harm, or crisis situations, prioritize immediate safety and recommend trusted people, local emergency services, or qualified professionals.\n\nAuthorized CoupleSync context (may be empty):\n${JSON.stringify(data)}`;
 }
 
-export async function answer(
-  repo: Repository,
-  userId: string,
-  conversation: AIConversation,
-  text: string,
-  onDelta?: (delta: string) => void,
-) {
-  if (!enabled()) throw new Error("CoupleSync AI is not configured. Start OpenCode and set OPENCODE_ENABLED=true and OPENCODE_HOST.");
-  const settings = await getSiteSettings();
-  if (!settings.aiEnabled) throw new Error("The WenX chatbot is currently disabled by the administrator.");
-  const assistantName = settings.aiName?.trim() || AI_NAME;
-  // "custom" points at any provider known to OpenCode, e.g. "deepseek" — set its ID in Site settings.
-  const providerID = settings.aiProvider === "custom" ? (settings.aiCustomProvider?.trim().toLowerCase() || "custom") : settings.aiProvider ?? "opencode";
-  const clean = text.trim();
-  if (!clean || clean.length > 4000) throw new Error("Message must be between 1 and 4000 characters.");
+function enforceRateLimit(userId: string) {
   requestLog.__coupleSyncAIRate ??= new Map();
   const recent = (requestLog.__coupleSyncAIRate.get(userId) ?? []).filter((stamp) => Date.now() - stamp < 60_000);
   if (recent.length >= 12) throw new Error("You have sent several messages quickly. Please wait a minute and try again.");
   recent.push(Date.now());
   requestLog.__coupleSyncAIRate.set(userId, recent);
-  const history = await repo.list("aiMessages", { eq: { conversationId: conversation.id, userId } }, { orderBy: "createdAt", descending: true, limit: maxMessages() });
-  const data = await context(repo, userId);
+}
+
+async function persistTurn(
+  repo: Repository,
+  conversation: AIConversation,
+  userId: string,
+  clean: string,
+  response: string,
+  provider: string,
+  model: string | null,
+) {
+  const stamp = now();
+  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "user", content: clean, metadata: null, createdAt: stamp });
+  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "assistant", content: response, metadata: { provider, model }, createdAt: stamp });
+  await repo.update("aiConversations", conversation.id, { title: conversation.title === "New conversation" ? clean.slice(0, 60) : conversation.title, updatedAt: stamp });
+}
+
+async function answerWithGemini(
+  repo: Repository,
+  userId: string,
+  conversation: AIConversation,
+  clean: string,
+  assistantName: string,
+  modelId: string,
+  history: AIMessage[],
+  data: unknown,
+  onDelta?: (delta: string) => void,
+) {
+  const key = geminiApiKey();
+  if (!key) throw new Error("Set GEMINI_API_KEY in the server environment to use Google Gemini without OpenCode.");
+  const model = modelId.trim() || "gemini-2.5-flash";
+  const timeout = Number(process.env.AI_TIMEOUT_MS || 45_000);
+  const contents = [
+    ...history
+      .slice()
+      .reverse()
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: message.content }],
+      })),
+    { role: "user", parts: [{ text: clean }] },
+  ];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt(assistantName, data) }] },
+      contents,
+      generationConfig: { temperature: 0.7 },
+    }),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(payload.error?.message || `Gemini returned ${response.status}`);
+  }
+  if (!response.body) throw new Error("Gemini returned an empty stream.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const streamed: string[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n");
+    buffer = chunks.pop() ?? "";
+    for (const line of chunks) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const raw = trimmed.slice(5).trim();
+      if (!raw || raw === "[DONE]") continue;
+      try {
+        const event = JSON.parse(raw) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; error?: { message?: string } };
+        if (event.error?.message) throw new Error(event.error.message);
+        const delta = event.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+        if (!delta) continue;
+        streamed.push(delta);
+        onDelta?.(delta);
+      } catch (error) {
+        if (error instanceof SyntaxError) continue;
+        throw error;
+      }
+    }
+  }
+  const text = streamed.join("").trim() || "I’m sorry, I couldn’t form a response just now.";
+  if (!streamed.length) onDelta?.(text);
+  await persistTurn(repo, conversation, userId, clean, text, "google", model);
+  return text;
+}
+
+async function answerWithOpenCode(
+  repo: Repository,
+  userId: string,
+  conversation: AIConversation,
+  clean: string,
+  assistantName: string,
+  providerID: string,
+  modelId: string,
+  history: AIMessage[],
+  data: unknown,
+  onDelta?: (delta: string) => void,
+) {
   const prompt = `${systemPrompt(assistantName, data)}\n\nRecent conversation:\n${history.reverse().map((message) => `${message.role}: ${message.content}`).join("\n")}\n\nUser: ${clean}`;
   const opencode = client();
-  const model = settings.aiModel
-    ? { providerID, id: settings.aiModel }
+  const model = modelId
+    ? { providerID, id: modelId }
     : providerID !== "opencode"
       ? (await opencode.model.list()).data.find((candidate) => candidate.providerID === providerID && candidate.status === "active")
       : undefined;
@@ -205,9 +327,37 @@ export async function answer(
   }
   const response = result.text.trim() || streamed.join("").trim() || "I’m sorry, I couldn’t form a response just now.";
   if (!streamed.length && response) onDelta?.(response);
-  const stamp = now();
-  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "user", content: clean, metadata: null, createdAt: stamp });
-  await repo.insert("aiMessages", { id: createId(), conversationId: conversation.id, userId, role: "assistant", content: response, metadata: { provider: providerID, model: settings.aiModel || null }, createdAt: stamp });
-  await repo.update("aiConversations", conversation.id, { title: conversation.title === "New conversation" ? clean.slice(0, 60) : conversation.title, updatedAt: stamp });
+  await persistTurn(repo, conversation, userId, clean, response, providerID, modelId || null);
   return response;
+}
+
+export async function answer(
+  repo: Repository,
+  userId: string,
+  conversation: AIConversation,
+  text: string,
+  onDelta?: (delta: string) => void,
+) {
+  const settings = await getSiteSettings();
+  if (!settings.aiEnabled) throw new Error("The WenX chatbot is currently disabled by the administrator.");
+  const assistantName = settings.aiName?.trim() || AI_NAME;
+  // "custom" points at any provider known to OpenCode, e.g. "deepseek" — set its ID in Site settings.
+  const providerID = settings.aiProvider === "custom" ? (settings.aiCustomProvider?.trim().toLowerCase() || "custom") : settings.aiProvider ?? "google";
+  const clean = text.trim();
+  if (!clean || clean.length > 4000) throw new Error("Message must be between 1 and 4000 characters.");
+  enforceRateLimit(userId);
+  const history = await repo.list("aiMessages", { eq: { conversationId: conversation.id, userId } }, { orderBy: "createdAt", descending: true, limit: maxMessages() });
+  const data = await context(repo, userId);
+  const modelId = settings.aiModel?.trim() || "";
+
+  if (opencodeEnabled()) {
+    return answerWithOpenCode(repo, userId, conversation, clean, assistantName, providerID, modelId, history, data, onDelta);
+  }
+  if (providerID === "google" && geminiApiKey()) {
+    return answerWithGemini(repo, userId, conversation, clean, assistantName, modelId, history, data, onDelta);
+  }
+  if (providerID === "google") {
+    throw new Error("CoupleSync AI is not configured. Set GEMINI_API_KEY in the server environment, or start OpenCode with OPENCODE_ENABLED=true and OPENCODE_HOST.");
+  }
+  throw new Error("CoupleSync AI is not configured. Start OpenCode and set OPENCODE_ENABLED=true and OPENCODE_HOST.");
 }
