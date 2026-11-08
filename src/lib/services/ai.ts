@@ -37,6 +37,26 @@ function normalizeGeminiModel(modelId: string) {
   return raw;
 }
 
+const defaultGeminiFallbacks = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+
+/** Preferred model first, then lighter Flash models when Google returns capacity/quota errors. */
+function geminiModelCandidates(preferred: string) {
+  const fromEnv = (process.env.AI_GEMINI_MODELS || "")
+    .split(",")
+    .map((item) => normalizeGeminiModel(item))
+    .filter(Boolean);
+  const ordered = [normalizeGeminiModel(preferred), ...fromEnv, ...defaultGeminiFallbacks];
+  return [...new Set(ordered)];
+}
+
+function isGeminiCapacityError(message: string) {
+  return /high demand|try again later|capacity|overloaded|unavailable|RESOURCE_EXHAUSTED|quota|rate.?limit|too many requests|429|503|UNAVAILABLE/i.test(message);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** True when WenX can answer: OpenCode is up, or a Gemini API key is present for direct Google mode. */
 export function aiRuntimeConfigured() {
   return opencodeEnabled() || Boolean(geminiApiKey());
@@ -210,32 +230,15 @@ async function persistTurn(
   await repo.update("aiConversations", conversation.id, { title: conversation.title === "New conversation" ? clean.slice(0, 60) : conversation.title, updatedAt: stamp });
 }
 
-async function answerWithGemini(
-  repo: Repository,
-  userId: string,
-  conversation: AIConversation,
-  clean: string,
+async function streamGeminiReply(
+  key: string,
+  model: string,
   assistantName: string,
-  modelId: string,
-  history: AIMessage[],
   data: unknown,
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
   onDelta?: (delta: string) => void,
 ) {
-  const key = geminiApiKey();
-  if (!key) throw new Error("Set GEMINI_API_KEY in the server environment to use Google Gemini without OpenCode.");
-  const model = normalizeGeminiModel(modelId);
   const timeout = Number(process.env.AI_TIMEOUT_MS || 45_000);
-  const contents = [
-    ...history
-      .slice()
-      .reverse()
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .map((message) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: message.content }],
-      })),
-    { role: "user", parts: [{ text: clean }] },
-  ];
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
   const response = await fetch(url, {
     method: "POST",
@@ -282,8 +285,64 @@ async function answerWithGemini(
   }
   const text = streamed.join("").trim() || "I’m sorry, I couldn’t form a response just now.";
   if (!streamed.length) onDelta?.(text);
-  await persistTurn(repo, conversation, userId, clean, text, "google", model);
   return text;
+}
+
+async function answerWithGemini(
+  repo: Repository,
+  userId: string,
+  conversation: AIConversation,
+  clean: string,
+  assistantName: string,
+  modelId: string,
+  history: AIMessage[],
+  data: unknown,
+  onDelta?: (delta: string) => void,
+) {
+  const key = geminiApiKey();
+  if (!key) throw new Error("Set GEMINI_API_KEY in the server environment to use Google Gemini without OpenCode.");
+  const contents = [
+    ...history
+      .slice()
+      .reverse()
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: message.content }],
+      })),
+    { role: "user", parts: [{ text: clean }] },
+  ];
+  const candidates = geminiModelCandidates(modelId);
+  let lastError = "Gemini is busy right now. Please try again in a moment.";
+  let started = false;
+  const trackDelta = (delta: string) => {
+    started = true;
+    onDelta?.(delta);
+  };
+  for (let index = 0; index < candidates.length; index += 1) {
+    const model = candidates[index];
+    // One short retry on the preferred model when Google reports temporary high demand.
+    const attempts = index === 0 ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const text = await streamGeminiReply(key, model, assistantName, data, contents, trackDelta);
+        await persistTurn(repo, conversation, userId, clean, text, "google", model);
+        return text;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        lastError = message;
+        // Once tokens reached the UI, do not switch models mid-reply.
+        if (started || !isGeminiCapacityError(message)) throw error instanceof Error ? error : new Error(message);
+        if (attempt + 1 < attempts) {
+          await sleep(800);
+          continue;
+        }
+      }
+    }
+  }
+  throw new Error(/high demand|try again later|overloaded|capacity/i.test(lastError)
+    ? "Gemini is under high demand right now. WenX tried backup models too — please retry in a minute."
+    : lastError);
 }
 
 async function answerWithOpenCode(
@@ -358,7 +417,13 @@ export async function answer(
   const modelId = providerID === "google" ? normalizeGeminiModel(settings.aiModel ?? "") : (settings.aiModel?.trim() || "");
 
   if (opencodeEnabled()) {
-    return answerWithOpenCode(repo, userId, conversation, clean, assistantName, providerID, modelId, history, data, onDelta);
+    try {
+      return await answerWithOpenCode(repo, userId, conversation, clean, assistantName, providerID, modelId, history, data, onDelta);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // When OpenCode's Google route is capacity-limited, fall through to direct Gemini with model backups.
+      if (!(providerID === "google" && geminiApiKey() && isGeminiCapacityError(message))) throw error;
+    }
   }
   if (providerID === "google" && geminiApiKey()) {
     return answerWithGemini(repo, userId, conversation, clean, assistantName, modelId, history, data, onDelta);
