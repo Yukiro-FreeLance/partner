@@ -3,7 +3,7 @@ import { format, parseISO } from "date-fns";
 import { patchExpenseAction } from "@/app/(app)/plans/actions";
 import { BudgetCharts } from "@/components/plans/budget-charts";
 import { ExpenseDetails } from "@/components/plans/expense-details";
-import { ExpenseForm } from "@/components/plans/expense-form";
+import { AddExpenseButton } from "@/components/plans/expense-form";
 import { PlanStatus } from "@/components/plans/status";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/feedback";
@@ -30,15 +30,15 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
     { name: "Shared", paid: summary.settlement.sharedPaid },
   ];
   return (
-    <main className="w-full px-4 py-5 pb-36 lg:px-8 lg:pb-5">
+    <main className="w-full px-3 py-3 pb-28 lg:px-6 lg:py-4">
       <PlanStatus saved={saved} error={error} />
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold tracking-[0.16em] text-rose uppercase">Shared budget</p>
-          <h1 className="font-serif text-2xl leading-tight sm:text-3xl lg:text-4xl">{plan.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{splitLabels[plan.splitMethod]} · Warning at {plan.warningThreshold}%</p>
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-rose uppercase">Shared budget</p>
+          <h1 className="font-serif text-lg leading-snug sm:text-xl">{plan.title}</h1>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{splitLabels[plan.splitMethod]} · Warning at {plan.warningThreshold}%</p>
         </div>
-        <Link href={`/plans/${plan.id}`} className="inline-flex min-h-11 items-center text-sm text-primary">Back to itinerary</Link>
+        <Link href={`/plans/${plan.id}`} className="inline-flex h-7 items-center rounded-full bg-secondary px-2.5 text-[11px]">Back to itinerary</Link>
       </div>
       <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Planned budget" value={formatMoney(summary.budget, plan.currency)} />
@@ -46,9 +46,9 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
         <Stat label="Remaining" value={formatMoney(summary.remaining, plan.currency)} tone={summary.remaining < 0 ? "text-rose-700" : ""} />
         <Stat label="Unspent" value={formatMoney(summary.unspent, plan.currency)} />
       </section>
-      <section className="mt-4 panel p-5">
+      <section className="mt-3 panel p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-serif text-xl lg:text-2xl">Budget usage</h2>
+          <h2 className="font-serif text-base">Budget usage</h2>
           <span className={`rounded-full px-2 py-1 text-xs font-semibold ${healthClass(summary.health)}`}>{healthLabel(summary.health, summary.actual, summary.budget)}</span>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{summary.utilization}% used{summary.overAmount > 0 ? ` · Over by ${formatMoney(summary.overAmount, plan.currency)}` : ""}</p>
@@ -64,8 +64,8 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
         <Stat label="Shared payments" value={formatMoney(summary.settlement.sharedPaid, plan.currency)} detail="Recorded as paid together" />
         <Stat label="Shared bills" value={formatMoney(summary.settlement.sharedBills, plan.currency)} detail="Expenses that are not individually owned" />
       </section>
-      <section className="mt-4 panel p-5">
-        <h2 className="font-serif text-xl lg:text-2xl">Balance</h2>
+      <section className="mt-3 panel p-3">
+        <h2 className="font-serif text-base">Balance</h2>
         {summary.settlement.amount > 0 && summary.settlement.owedBy && summary.settlement.owedTo ? (
           <p className="mt-2 text-sm leading-6">{payerName(detail.partners, summary.settlement.owedBy)} owes {payerName(detail.partners, summary.settlement.owedTo)} {formatMoney(summary.settlement.amount, plan.currency)}.</p>
         ) : (
@@ -81,14 +81,11 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
           <DayTable key={day.dayId ?? "unassigned"} day={day} currency={plan.currency} expenses={detail.expenses.filter((expense) => (expense.itineraryDayId ?? null) === day.dayId)} planId={plan.id} title={day.date ? format(parseISO(day.date), "MMMM d") : "Unassigned"} days={days} activities={activities} partners={detail.partners} />
         ))}
       </div>
-      <section id="add-expense" className="mt-6 panel p-5">
-        <h2 className="font-serif text-xl lg:text-2xl">Add an expense</h2>
-        <div className="mt-4">
-          <ExpenseForm planId={plan.id} currency={plan.currency} days={days} activities={activities} partners={detail.partners} returnTo={`/plans/${plan.id}/budget`} />
-        </div>
-      </section>
+      <div className="mt-4">
+        <AddExpenseButton planId={plan.id} currency={plan.currency} days={days} activities={activities} partners={detail.partners} returnTo={`/plans/${plan.id}/budget`} defaultDate={plan.startDate ? `${plan.startDate}T12:00` : ""} />
+      </div>
       <div className="fixed bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4.25rem))] left-3 right-20 z-30 lg:bottom-[6.5rem] lg:left-auto lg:right-7 lg:w-auto">
-        <a href="#add-expense" className="inline-flex h-8 w-full items-center justify-center rounded-full bg-primary px-3 text-xs text-primary-foreground shadow-[var(--shadow)] sm:h-11 sm:text-sm lg:w-auto">Add expense</a>
+        <AddExpenseButton planId={plan.id} currency={plan.currency} days={days} activities={activities} partners={detail.partners} returnTo={`/plans/${plan.id}/budget`} defaultDate={plan.startDate ? `${plan.startDate}T12:00` : ""} className="inline-flex h-7 w-full items-center justify-center rounded-full bg-primary px-2.5 text-[11px] text-primary-foreground shadow-[var(--shadow)] lg:w-auto" />
       </div>
     </main>
   );
@@ -96,9 +93,9 @@ export function BudgetScreen({ detail, saved, error }: { detail: PlanDetail; sav
 
 function DayTable({ day, currency, expenses, planId, title, days, activities, partners }: { day: DayBudget; currency: string; expenses: ItineraryExpense[]; planId: string; title: string; days: { id: string; label: string }[]; activities: { id: string; label: string }[]; partners: PlanDetail["partners"] }) {
   return (
-    <section className="panel p-4">
+    <section className="panel p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-serif text-xl lg:text-2xl">{title}</h2>
+        <h2 className="font-serif text-base">{title}</h2>
         <span className={`rounded-full px-2 py-1 text-xs font-semibold ${healthClass(day.health)}`}>{healthLabel(day.health, day.actual, day.estimated)}</span>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">Estimated {formatMoney(day.estimated, currency)} · Actual {formatMoney(day.actual, currency)} · Remaining {formatMoney(day.remaining, currency)}{day.overAmount > 0 ? ` · Over ${formatMoney(day.overAmount, currency)}` : ""}</p>
@@ -161,10 +158,10 @@ function ExpenseRow({ expense, currency, planId, days, activities, partners }: {
   const difference = Math.round((expense.estimatedAmount - expense.actualAmount) * 100) / 100;
   return (
     <tr className="border-t border-[#f3e8f5]">
-      <th className="py-2 pr-3 font-medium">{expense.expenseName}<span className="mt-1 block text-xs font-normal text-muted-foreground">{expenseStatusLabels[expense.status]}</span></th>
+      <th className="py-2 pr-3 font-medium">{expense.expenseName}{storeOf(expense.notes) && <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">{storeOf(expense.notes)}</span>}<span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">{expenseStatusLabels[expense.status]}</span></th>
       <td className="py-2 pr-3">{categoryLabels[expense.category]}</td>
-      <td className="py-2 pr-3"><input form={formId} name="estimatedAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.estimatedAmount} aria-label={`Estimated amount for ${expense.expenseName}`} className="h-11 w-28 rounded-2xl border px-2" /></td>
-      <td className="py-2 pr-3"><input form={formId} name="actualAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.actualAmount} aria-label={`Actual amount for ${expense.expenseName}`} className="h-11 w-28 rounded-2xl border px-2" /></td>
+      <td className="py-2 pr-3"><input form={formId} name="estimatedAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.estimatedAmount} aria-label={`Estimated amount for ${expense.expenseName}`} className="h-8 w-24 rounded-xl border px-2 text-xs" /></td>
+      <td className="py-2 pr-3"><input form={formId} name="actualAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.actualAmount} aria-label={`Actual amount for ${expense.expenseName}`} className="h-8 w-24 rounded-xl border px-2 text-xs" /></td>
       <td className={`py-2 pr-3 ${diffClass(difference)}`}>{formatMoney(difference, currency)}</td>
       <td className="py-2">
         <form id={formId} action={patchExpenseAction}>
@@ -186,7 +183,7 @@ function ExpenseCard({ expense, currency, planId, days, activities, partners }: 
         <input type="hidden" name="planId" value={planId} />
         <input type="hidden" name="expenseId" value={expense.id} />
         <p className="text-sm font-medium leading-4">{expense.expenseName}</p>
-        <p className="text-[11px] leading-4 text-muted-foreground">{categoryLabels[expense.category]} · {expenseStatusLabels[expense.status]}</p>
+        <p className="text-[11px] leading-4 text-muted-foreground">{[storeOf(expense.notes), categoryLabels[expense.category], expenseStatusLabels[expense.status]].filter(Boolean).join(" · ")}</p>
         <div className="mt-1.5 grid grid-cols-2 gap-1.5">
           <label className="grid gap-0.5 text-[11px]">Estimated<input name="estimatedAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.estimatedAmount} className="h-8 rounded-xl border bg-white px-2 text-sm" /></label>
           <label className="grid gap-0.5 text-[11px]">Actual<input name="actualAmount" inputMode="decimal" min={0} step="0.01" defaultValue={expense.actualAmount} className="h-8 rounded-xl border bg-white px-2 text-sm" /></label>
@@ -201,12 +198,16 @@ function ExpenseCard({ expense, currency, planId, days, activities, partners }: 
 
 function Stat({ label, value, detail, tone = "" }: { label: string; value: string; detail?: string; tone?: string }) {
   return (
-    <article className="panel p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`mt-1 font-serif text-xl lg:text-2xl ${tone}`}>{value}</p>
+    <article className="panel p-3">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 font-serif text-base ${tone}`}>{value}</p>
       {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
     </article>
   );
+}
+
+function storeOf(notes: string | null) {
+  return notes?.match(/^Store:\s*(.+)$/m)?.[1]?.trim() ?? "";
 }
 
 function diffClass(value: number) {

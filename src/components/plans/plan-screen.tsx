@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { eachDayOfInterval, endOfWeek, format, parseISO, startOfWeek } from "date-fns";
 import { deleteDayAction, saveCommentAction } from "@/app/(app)/plans/actions";
+import { AddExpenseButton } from "@/components/plans/expense-form";
 import { AddActivityButton, AddDayButton } from "@/components/plans/plan-composer";
 import { DayBoard, type BoardActivity } from "@/components/plans/day-board";
 import { PlanStatus } from "@/components/plans/status";
@@ -45,7 +46,7 @@ export function PlanScreen({ detail, view, saved, error, viewerId, day, span }: 
           <div className="flex flex-wrap gap-1.5">
             <Link href={`/plans/${plan.id}`} className="inline-flex h-7 items-center justify-center rounded-full bg-primary px-2.5 text-[11px] text-primary-foreground">View itinerary</Link>
             <Link href={`/plans/${plan.id}/edit`} className="inline-flex h-7 items-center justify-center rounded-full bg-secondary px-2.5 text-[11px]">Edit plan</Link>
-            <Link href={`/plans/${plan.id}/budget#add-expense`} className="inline-flex h-7 items-center justify-center rounded-full bg-secondary px-2.5 text-[11px]">Add expense</Link>
+            <AddExpenseButton planId={plan.id} currency={plan.currency} days={dayChoices} activities={detail.activities.map((activity) => ({ id: activity.id, label: activity.title }))} partners={detail.partners} returnTo={here} defaultDayId={activityDayId} defaultDate={focus ? `${focus}T12:00` : ""} label="Add expense" className="inline-flex h-7 items-center justify-center rounded-full bg-secondary px-2.5 text-[11px] text-foreground" />
             <Link href={`/plans/${plan.id}/budget`} className="inline-flex h-7 items-center justify-center rounded-full bg-secondary px-2.5 text-[11px]">View budget</Link>
           </div>
         </div>
@@ -131,7 +132,7 @@ export function PlanScreen({ detail, view, saved, error, viewerId, day, span }: 
       </div>
       <div className="fixed bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4.25rem))] left-3 right-20 z-30 grid grid-cols-2 gap-1.5 lg:bottom-[6.5rem] lg:left-auto lg:right-7 lg:flex lg:w-auto lg:flex-col">
         <AddActivityButton planId={plan.id} returnTo={here} days={dayChoices} dayId={activityDayId} currency={plan.currency} label="Add activity" className="inline-flex h-7 items-center justify-center rounded-full bg-primary px-2.5 text-[11px] text-primary-foreground shadow-[var(--shadow)]" />
-        <Link href={`/plans/${plan.id}/budget#add-expense`} className="inline-flex h-7 items-center justify-center rounded-full bg-white px-2.5 text-[11px] shadow-[var(--shadow)]">Add expense</Link>
+        <AddExpenseButton planId={plan.id} currency={plan.currency} days={dayChoices} activities={detail.activities.map((activity) => ({ id: activity.id, label: activity.title }))} partners={detail.partners} returnTo={here} defaultDayId={activityDayId} defaultDate={focus ? `${focus}T12:00` : ""} label="Add expense" className="inline-flex h-7 items-center justify-center rounded-full bg-white px-2.5 text-[11px] text-foreground shadow-[var(--shadow)]" />
       </div>
     </main>
   );

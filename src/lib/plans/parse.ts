@@ -183,6 +183,7 @@ export function expenseFromForm(form: FormData): Result<ExpenseInput> {
   const payment = text(form, "paymentMethod");
   const expenseDate = text(form, "expenseDate");
   const notes = optionalText(form, "notes", 2000);
+  const store = text(form, "store").slice(0, 120);
   const status = text(form, "status") || "planned";
   const dayId = text(form, "dayId");
   const activityId = text(form, "activityId");
@@ -214,7 +215,7 @@ export function expenseFromForm(form: FormData): Result<ExpenseInput> {
     customSplitPercent,
     paymentMethod: payment ? (payment as PaymentMethod) : null,
     expenseDate,
-    notes: notes.data,
+    notes: withStore(store, notes.data),
     status: status as ExpenseStatus,
   });
 }
@@ -232,6 +233,14 @@ export function commentFromForm(form: FormData) {
   const activityId = text(form, "activityId");
   if (body.length < 1 || body.length > 1000) return fail("Comments can be up to 1,000 characters.");
   return ok({ body, activityId: activityId || null });
+}
+
+function withStore(store: string, notes: string | null) {
+  const body = (notes ?? "").replace(/^Store:[^\n]*(?:\r?\n)?/, "").trim();
+  if (!store) return body || null;
+  const line = `Store: ${store}`;
+  const clipped = body.slice(0, Math.max(0, 2000 - line.length - 1)).trim();
+  return clipped ? `${line}\n${clipped}` : line;
 }
 
 function text(form: FormData, key: string) {

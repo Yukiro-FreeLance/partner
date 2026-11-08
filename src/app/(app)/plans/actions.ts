@@ -8,6 +8,7 @@ import { getRepository } from "@/lib/data";
 import { createId } from "@/lib/ids";
 import { storeMediaFile } from "@/lib/media-files";
 import { isMissingPlanTable } from "@/lib/plans/errors";
+import { analyzeReceipt } from "@/lib/plans/receipt";
 import { activityFromForm, checklistFromForm, commentFromForm, dayFromForm, expenseFromForm, planFromForm } from "@/lib/plans/parse";
 import { roundMoney } from "@/lib/plans/money";
 import {
@@ -211,6 +212,19 @@ export async function deleteChecklistAction(formData: FormData) {
   const { user, repo } = await context();
   const planId = String(formData.get("planId") ?? "");
   await attempt(back(formData, `/plans/${planId}`), () => deleteChecklistItem(repo, user.profile.id, planId, String(formData.get("checklistId") ?? "")));
+}
+
+export async function scanReceiptAction(formData: FormData) {
+  await context();
+  const file = formData.get("receipt");
+  if (!(file instanceof File) || file.size === 0) return { ok: false as const, error: "Choose a receipt photo first." };
+  const contentType = file.type === "image/jpg" || file.type === "image/pjpeg" ? "image/jpeg" : file.type === "image/x-png" ? "image/png" : file.type;
+  if (!images.has(contentType)) return { ok: false as const, error: "Scan a JPEG, PNG, WEBP, or GIF photo. A PDF can still be attached when you save." };
+  if (file.size > 1_500_000) return { ok: false as const, error: "That photo is too large to scan. Use one under 1.5 MB." };
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const scanned = await analyzeReceipt(bytes, contentType);
+  if (!scanned.ok) return scanned;
+  return { ok: true as const, ...scanned.data };
 }
 
 export async function saveExpenseAction(formData: FormData) {
