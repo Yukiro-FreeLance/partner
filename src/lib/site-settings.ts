@@ -28,8 +28,8 @@ export const defaultSiteSettings: SiteSettings = {
   ogImageData: null,
   aiEnabled: true,
   aiName: "WenX",
-  aiProvider: "opencode",
-  aiModel: "",
+  aiProvider: "google",
+  aiModel: "gemini-2.5-flash",
   aiCustomProvider: "",
   updatedAt: "",
 };
