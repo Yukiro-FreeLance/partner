@@ -29,7 +29,7 @@ export const defaultSiteSettings: SiteSettings = {
   aiEnabled: true,
   aiName: "WenX",
   aiProvider: "google",
-  aiModel: "gemini-2.5-flash",
+  aiModel: "gemini-3.8-flash",
   aiCustomProvider: "",
   updatedAt: "",
 };
@@ -39,7 +39,7 @@ export const aiProviders: { value: AIProvider; label: string; help: string }[] =
   { value: "openrouter", label: "OpenRouter", help: "Use an OpenRouter model configured in OpenCode." },
   { value: "openai", label: "OpenAI", help: "Use an OpenAI model configured in OpenCode." },
   { value: "anthropic", label: "Anthropic", help: "Use an Anthropic model configured in OpenCode." },
-  { value: "google", label: "Google Gemini", help: "Use a Gemini model configured in OpenCode." },
+  { value: "google", label: "Google Gemini", help: "Uses GEMINI_API_KEY from the server environment, or OpenCode when it is running." },
   { value: "custom", label: "Custom provider", help: "Use a provider ID configured in OpenCode." },
 ];
 

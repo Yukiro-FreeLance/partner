@@ -30,6 +30,13 @@ function geminiApiKey() {
   return firstEnv("GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY");
 }
 
+/** Gemini 2.5 Flash is closed to new Google AI users; map it to the current Flash default. */
+function normalizeGeminiModel(modelId: string) {
+  const raw = modelId.trim().replace(/^models\//, "");
+  if (!raw || raw === "gemini-2.5-flash") return "gemini-3.8-flash";
+  return raw;
+}
+
 /** True when WenX can answer: OpenCode is up, or a Gemini API key is present for direct Google mode. */
 export function aiRuntimeConfigured() {
   return opencodeEnabled() || Boolean(geminiApiKey());
@@ -216,7 +223,7 @@ async function answerWithGemini(
 ) {
   const key = geminiApiKey();
   if (!key) throw new Error("Set GEMINI_API_KEY in the server environment to use Google Gemini without OpenCode.");
-  const model = modelId.trim() || "gemini-2.5-flash";
+  const model = normalizeGeminiModel(modelId);
   const timeout = Number(process.env.AI_TIMEOUT_MS || 45_000);
   const contents = [
     ...history
@@ -348,7 +355,7 @@ export async function answer(
   enforceRateLimit(userId);
   const history = await repo.list("aiMessages", { eq: { conversationId: conversation.id, userId } }, { orderBy: "createdAt", descending: true, limit: maxMessages() });
   const data = await context(repo, userId);
-  const modelId = settings.aiModel?.trim() || "";
+  const modelId = providerID === "google" ? normalizeGeminiModel(settings.aiModel ?? "") : (settings.aiModel?.trim() || "");
 
   if (opencodeEnabled()) {
     return answerWithOpenCode(repo, userId, conversation, clean, assistantName, providerID, modelId, history, data, onDelta);
