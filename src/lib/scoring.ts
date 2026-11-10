@@ -75,6 +75,72 @@ function markPoints(mark: SimilarityValue) {
   return scored(0, "You marked these written answers as different.");
 }
 
+const STOP_WORDS = new Set(["a", "an", "the", "to", "of", "and", "or", "my", "your", "you", "i", "im", "me", "we", "our", "is", "it", "in", "on", "at", "for", "with", "that", "this"]);
+
+function stemToken(token: string) {
+  if (token.length > 4 && token.endsWith("es") && !token.endsWith("ss")) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) return token.slice(0, -1);
+  return token;
+}
+
+function meaningTokens(value: string) {
+  return normalizeText(value).split(" ").map(stemToken).filter((token) => token && !STOP_WORDS.has(token));
+}
+
+function editDistance(left: string, right: string) {
+  if (left === right) return 0;
+  if (left.length > 160 || right.length > 160) return Math.max(left.length, right.length);
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const current = row[j];
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + cost);
+      previous = current;
+    }
+  }
+  return row[right.length];
+}
+
+/** 1 when wording matches after cleanup; lower when the words or spelling are only close. */
+export function textSimilarity(leftRaw: string, rightRaw: string) {
+  const left = normalizeText(leftRaw);
+  const right = normalizeText(rightRaw);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const a = meaningTokens(leftRaw);
+  const b = meaningTokens(rightRaw);
+  if (a.length && a.join(" ") === b.join(" ")) return 1;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const token of setA) if (setB.has(token)) intersection += 1;
+  const union = new Set([...setA, ...setB]).size;
+  let score = union ? intersection / union : 0;
+  const shorter = setA.size <= setB.size ? setA : setB;
+  const longer = setA.size <= setB.size ? setB : setA;
+  const contained = shorter.size > 0 && [...shorter].every((token) => longer.has(token));
+  const coverage = longer.size ? shorter.size / longer.size : 0;
+  if (contained && (coverage >= 0.6 || (shorter.size >= 2 && coverage >= 0.4))) {
+    score = Math.max(score, 0.55 + 0.45 * coverage);
+  } else if (contained && shorter.size === 1 && coverage >= 0.5 && [...shorter][0].length >= 4) {
+    score = Math.max(score, 0.7);
+  }
+  const max = Math.max(left.length, right.length);
+  const fuzzy = max ? 1 - editDistance(left, right) / max : 0;
+  if (fuzzy >= 0.88 || (Math.min(left.length, right.length) >= 8 && fuzzy >= 0.8)) score = Math.max(score, fuzzy);
+  return score;
+}
+
+function textPoints(score: number): Comparison | null {
+  if (score >= 0.92) return scored(1, "The written answers match, allowing for spelling, plurals, and word order.");
+  if (score >= 0.75) return scored(0.85, "The written answers are very close in wording.");
+  if (score >= 0.55) return scored(0.65, "The written answers share most of the same words.");
+  return null;
+}
+
 export function compareResponses(
   question: ComparableQuestion,
   actual: ComparableResponse,
@@ -133,13 +199,15 @@ export function compareResponses(
   }
 
   if (type === "short_text" || type === "long_text" || type === "voice") {
-    const left = normalizeText(actual.payload.text ?? "");
-    const right = normalizeText(prediction.payload.text ?? "");
-    if (left && right && left === right) {
-      return scored(1, "The written answers match after ignoring case, punctuation, and extra spaces.");
-    }
-    if (mark) return markPoints(mark);
-    return ineligible("unscored_text");
+    const left = actual.payload.text ?? "";
+    const right = prediction.payload.text ?? "";
+    if (!normalizeText(left) || !normalizeText(right)) return ineligible("incomplete");
+    const automatic = textPoints(textSimilarity(left, right));
+    if (!mark) return automatic ?? ineligible("unscored_text");
+    const marked = markPoints(mark);
+    if (!automatic) return marked;
+    if (mark === "different") return marked;
+    return automatic.points >= marked.points ? automatic : marked;
   }
 
   return ineligible("unsupported");
@@ -267,6 +335,26 @@ export function formatScore(score: number | null) {
 export function formatPoints(points: number, eligible: number) {
   const value = Math.round(points * 10) / 10;
   return `${Number.isInteger(value) ? value : value.toFixed(1)}/${eligible} points`;
+}
+
+export function pointLabel(points: number) {
+  const value = Math.round(points * 10) / 10;
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+export type RoundBadge = { label: string; detail: string; tone: string };
+
+export function roundBadges(summary: ScoreSummary): RoundBadge[] {
+  if (summary.eligible === 0) {
+    return [{ label: "Score pending", detail: "Badges appear once a guess can be compared with a finished answer.", tone: "bg-[#f3e8ff] text-primary" }];
+  }
+  const badges: RoundBadge[] = [
+    { label: summary.label, detail: `${formatScore(summary.score)} prediction accuracy`, tone: "bg-[#f3e8ff] text-primary" },
+    { label: formatPoints(summary.points, summary.eligible), detail: "Counted points from this comparison", tone: "bg-white text-foreground ring-1 ring-primary/15" },
+  ];
+  if (summary.correct > 0) badges.push({ label: `${summary.correct} exact`, detail: summary.correct === 1 ? "One guess matched completely." : "Guesses that matched completely.", tone: "bg-emerald-100 text-emerald-900" });
+  if (summary.close > 0) badges.push({ label: `${summary.close} close`, detail: "Nearby ratings, rankings, or similar wording.", tone: "bg-amber-100 text-amber-950" });
+  return badges;
 }
 
 export const SCORE_DISCLAIMER =

@@ -7,6 +7,7 @@ import {
   isPartnerPrediction,
   knowledgeBand,
   preferenceBand,
+  roundBadges,
   summarize,
 } from "@/lib/scoring";
 
@@ -89,6 +90,31 @@ describe("compareResponses", () => {
     expect(result.points).toBe(1);
   });
 
+  it("gives full or partial credit when a word or sentence is only similar", () => {
+    expect(compareResponses({ answerType: "short_text" }, { payload: { text: "Mango floats" } }, { payload: { text: "mango float" } }).points).toBe(1);
+    expect(compareResponses({ answerType: "long_text" }, { payload: { text: "a quiet morning" } }, { payload: { text: "quiet mornings" } }).points).toBe(1);
+    const close = compareResponses({ answerType: "short_text" }, { payload: { text: "beach vacation" } }, { payload: { text: "a vacation at the beach" } });
+    expect(close.points).toBeGreaterThanOrEqual(0.65);
+    expect(close.kind).not.toBe("miss");
+    const word = compareResponses({ answerType: "short_text" }, { payload: { text: "I love coffee" } }, { payload: { text: "coffee" } });
+    expect(word.eligible).toBe(true);
+    expect(word.points).toBeGreaterThan(0);
+    expect(word.points).toBeLessThan(1);
+    const different = compareResponses({ answerType: "short_text" }, { payload: { text: "pizza" } }, { payload: { text: "pasta" } });
+    expect(different.eligible).toBe(false);
+    expect(different.reason).toBe("unscored_text");
+  });
+
+  it("lets an explicit different mark override a close written guess", () => {
+    const marked = compareResponses(
+      { answerType: "short_text" },
+      { payload: { text: "quiet morning" } },
+      { payload: { text: "quiet mornings" } },
+      "different",
+    );
+    expect(marked).toMatchObject({ eligible: true, points: 0, kind: "miss" });
+  });
+
   it("excludes skipped and missing answers and still counts a shared sensitive answer", () => {
     expect(compareResponses({ answerType: "yesno" }, { payload: { choice: "yes" }, skipped: true }, choice("yes")).reason).toBe("skipped");
     expect(compareResponses({ answerType: "yesno" }, null, choice("yes")).reason).toBe("missing_actual");
@@ -160,5 +186,16 @@ describe("summarize", () => {
     expect(couple.eligible).toBe(3);
     expect(couple.points).toBe(2);
     expect(couple.score).toBeCloseTo((2 / 3) * 100, 3);
+  });
+
+  it("builds point badges from exact and close credit", () => {
+    const summary = summarize([
+      compareResponses({ answerType: "short_text" }, { payload: { text: "mango float" } }, { payload: { text: "mango floats" } }),
+      compareResponses({ answerType: "short_text" }, { payload: { text: "I love coffee" } }, { payload: { text: "coffee" } }),
+    ]);
+    const labels = roundBadges(summary).map((badge) => badge.label);
+    expect(labels).toContain("1 exact");
+    expect(labels).toContain("1 close");
+    expect(roundBadges(summarize([])).map((badge) => badge.label)).toEqual(["Score pending"]);
   });
 });

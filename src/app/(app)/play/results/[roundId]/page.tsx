@@ -4,7 +4,7 @@ import { CategoryChart, ScoreReveal, ShareResult } from "@/components/quiz-resul
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { getRepository } from "@/lib/data";
-import { compareResponses, formatPoints, formatScore, SCORE_DISCLAIMER, summarize } from "@/lib/scoring";
+import { compareResponses, formatPoints, formatScore, pointLabel, roundBadges, SCORE_DISCLAIMER, summarize } from "@/lib/scoring";
 import { otherPartner } from "@/lib/services/access";
 import { getRoundResults } from "@/lib/services/quiz";
 
@@ -98,7 +98,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
             <div className="rounded-2xl bg-rose-50 p-3"><dt>Different</dt><dd className="font-serif text-2xl text-rose-700">{summary.incorrect}</dd></div>
             <div className="rounded-2xl bg-[#f3e8ff] p-3"><dt>Counted</dt><dd className="font-serif text-2xl text-primary">{summary.eligible}</dd></div>
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">{waiting > 0 ? `${waiting} still waiting on ${partnerName ?? "your partner"}. ` : ""}Skipped and written answers stay out of the percentage until they can be compared. The percentage is how close a guess was to their finished answer.</p>
+          <p className="mt-3 text-xs text-muted-foreground">{waiting > 0 ? `${waiting} still waiting on ${partnerName ?? "your partner"}. ` : ""}Skipped answers stay out of the percentage. Similar words and sentences earn close credit automatically. The percentage is how close a guess was to their finished answer.</p>
         </article>
       </section>
       <section>
@@ -110,7 +110,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
               <li key={item.question.id} className={`rounded-[1.75rem] border p-4 ${mark.card}`}>
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-xs text-muted-foreground">{categories.find((category) => category.id === item.question.categoryId)?.name}</p>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mark.badge}`}>{mark.label}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${mark.badge}`}>{mark.label}</span>
                 </div>
                 <p className="mt-2 font-medium leading-6">{item.question.selfPrompt}</p>
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -119,6 +119,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
                   <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">{partnerName ?? "Partner"} said</dt><dd className="mt-1 font-medium">{item.partnerLabel ?? "Waiting on their finished answer"}</dd></div>
                   <div className="rounded-2xl bg-white/80 p-3"><dt className="text-xs text-muted-foreground">{partnerName ?? "Partner"} guessed</dt><dd className="mt-1 font-medium">{item.partnerGuessLabel ?? (session?.status === "completed" ? "Waiting on their guess" : "Finish your round to see their guess")}</dd></div>
                 </dl>
+                {item.comparison?.eligible && item.comparison.points > 0 && item.comparison.points < 1 && <p className="mt-3 text-xs text-muted-foreground">{item.comparison.reason}</p>}
                 {item.comparison?.reason === "unscored_text" && (
                   <form action={similarityAction} className="mt-3 flex flex-wrap gap-2">
                     <input type="hidden" name="questionId" value={item.question.id} />
@@ -153,8 +154,19 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
         </article>
         <article className="panel p-5">
           <h2 className="font-serif text-2xl">Points and badges</h2>
-          <p className="mt-2 text-sm">{summary.points} counted points in this comparison. Badges are for showing up, not for a perfect score.</p>
-          <ul className="mt-3 flex flex-wrap gap-2">{achievements.map((item) => <li key={item.id} className="rounded-full bg-secondary px-3 py-1 text-xs">{catalog.find((achievement) => achievement.id === item.achievementId)?.name}</li>)}</ul>
+          <p className="mt-2 text-sm">Points add up from exact matches and close wording. Showing up still earns the longer-term badges below.</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {roundBadges(summary).map((badge) => (
+              <li key={badge.label} className={`rounded-2xl px-3 py-3 ${badge.tone}`}>
+                <p className="font-serif text-lg leading-tight">{badge.label}</p>
+                <p className="mt-1 text-xs leading-4 opacity-80">{badge.detail}</p>
+              </li>
+            ))}
+          </ul>
+          <ul className="mt-3 flex flex-wrap gap-2">{achievements.map((item) => {
+            const achievement = catalog.find((entry) => entry.id === item.achievementId);
+            return <li key={item.id} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">{achievement?.name}{achievement ? ` · ${achievement.points} pts` : ""}</li>;
+          })}</ul>
           {!achievements.length && <p className="mt-2 text-sm text-muted-foreground">Finish a round to earn the first badge.</p>}
         </article>
       </section>
@@ -187,8 +199,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ roundI
 function answerMark(item: { partnerAnswer: { skipped: boolean } | null; myPrediction: { skipped: boolean } | null; comparison: { eligible: boolean; points: number } | null }) {
   if (!item.partnerAnswer) return { label: "Waiting", badge: "bg-[#f3e8ff] text-primary", card: "border-[#f1e7f6] bg-white" };
   if (item.partnerAnswer.skipped || item.myPrediction?.skipped) return { label: "Skipped", badge: "bg-secondary text-muted-foreground", card: "border-[#f1e7f6] bg-white" };
-  if (item.comparison?.eligible && item.comparison.points === 1) return { label: "Matched", badge: "bg-emerald-100 text-emerald-800", card: "border-emerald-200 bg-[#f3fff8]" };
-  if (item.comparison?.eligible && item.comparison.points > 0) return { label: "Close", badge: "bg-amber-100 text-amber-900", card: "border-amber-200 bg-[#fffaf0]" };
-  if (item.comparison?.eligible) return { label: "Different", badge: "bg-rose-100 text-rose-800", card: "border-rose-200 bg-[#fff5f8]" };
+  if (item.comparison?.eligible && item.comparison.points === 1) return { label: `Matched · ${pointLabel(item.comparison.points)} pt`, badge: "bg-emerald-100 text-emerald-800", card: "border-emerald-200 bg-[#f3fff8]" };
+  if (item.comparison?.eligible && item.comparison.points > 0) return { label: `Close · ${pointLabel(item.comparison.points)} pt`, badge: "bg-amber-100 text-amber-900", card: "border-amber-200 bg-[#fffaf0]" };
+  if (item.comparison?.eligible) return { label: "Different · 0 pt", badge: "bg-rose-100 text-rose-800", card: "border-rose-200 bg-[#fff5f8]" };
   return { label: "Saved", badge: "bg-secondary text-primary", card: "border-[#f1e7f6] bg-white" };
 }

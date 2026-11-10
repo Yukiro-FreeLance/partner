@@ -94,6 +94,12 @@ html, body, * {
   border-radius: 999px;
 }
 
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background:
     radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--blush) 70%, transparent), transparent 60%),
@@ -159,11 +165,14 @@ h1, h2, h3, h4, .font-serif {
   #content a.min-h-11,
   #content button.min-h-11 { min-height: 2rem; }
   #content button.h-11,
-  #content a.h-11,
-  #content input.h-11,
-  #content select.h-11 {
+  #content a.h-11 {
     height: 2rem;
     font-size: 0.8125rem;
+  }
+  #content input,
+  #content textarea,
+  #content select {
+    font-size: 16px;
   }
   #content button.h-11,
   #content a.h-11 { padding-inline: 0.75rem; }

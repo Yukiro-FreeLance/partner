@@ -41,6 +41,7 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
         <Link className="underline" href="/play/games/ranks">Game ranking</Link>
         <Link className="underline" href="/play/daily">Daily question</Link>
         <Link className="underline" href="/play/library">Question library</Link>
+        <Link className="underline" href="/play/history">Quiz history</Link>
         <Link className="underline" href="/play/custom">Custom quiz</Link>
       </div>
       <section className="panel p-5">

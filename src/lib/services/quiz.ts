@@ -110,9 +110,7 @@ export async function startQuiz(
     updatedAt: createdAt,
   };
   await repo.insert("quizRounds", round);
-  for (const [position, question] of selected.entries()) {
-    await repo.insert("quizRoundQuestions", { id: createId(), roundId: round.id, questionId: question.id, position });
-  }
+  await Promise.all(selected.map((question, position) => repo.insert("quizRoundQuestions", { id: createId(), roundId: round.id, questionId: question.id, position })));
   const session = await insertSession(repo, round.id, userId);
   await writeAudit(repo, userId, "quiz.started", membership.coupleId);
   return ok({ round, session, questions: selected, answers: [], predictions: [] });
@@ -208,14 +206,16 @@ async function insertSession(repo: Repository, roundId: string, userId: string) 
 export async function joinRound(repo: Repository, userId: string, roundId: string): Promise<Result<RoundView>> {
   const round = await repo.find("quizRounds", { eq: { id: roundId } });
   if (!round) return fail("Quiz not found.");
-  const access = await requireMembership(repo, userId, round.coupleId);
-  if (!access.ok) return access;
   if (round.mode === "solo" && round.createdBy !== userId) return fail("This practice quiz is private.");
-  let session = await repo.find("quizSessions", { eq: { roundId, userId } });
-  if (!session) session = await insertSession(repo, roundId, userId);
-  const questions = await roundQuestions(repo, roundId);
-  const answers = await repo.list("userAnswers", { eq: { userId, roundId } });
-  const predictions = await repo.list("answerPredictions", { eq: { predictorId: userId, roundId } });
+  const [access, existingSession, questions, answers, predictions] = await Promise.all([
+    requireMembership(repo, userId, round.coupleId),
+    repo.find("quizSessions", { eq: { roundId, userId } }),
+    roundQuestions(repo, roundId),
+    repo.list("userAnswers", { eq: { userId, roundId } }),
+    repo.list("answerPredictions", { eq: { predictorId: userId, roundId } }),
+  ]);
+  if (!access.ok) return access;
+  const session = existingSession ?? await insertSession(repo, roundId, userId);
   return ok({ round, session, questions, answers, predictions });
 }
 
@@ -336,29 +336,36 @@ async function writeDrafts(repo: Repository, userId: string, ready: SaveContext,
   const writes: Promise<unknown>[] = [];
   for (const draft of drafts) {
     if (draft.selfAnswer && selfMode) {
-      writes.push(upsertAnswer(repo, {
-        userId,
-        coupleId: round.coupleId,
-        questionId: draft.questionId,
-        roundId: round.id,
-        payload: draft.selfAnswer.skipped ? draft.selfAnswer.payload : { ...draft.selfAnswer.payload, shareWithPartner: true },
-        skipped: draft.selfAnswer.skipped,
-      }, existingAnswers.find((answer) => answer.questionId === draft.questionId) ?? null));
+      const payload = draft.selfAnswer.skipped ? draft.selfAnswer.payload : { ...draft.selfAnswer.payload, shareWithPartner: true };
+      const existing = existingAnswers.find((answer) => answer.questionId === draft.questionId) ?? null;
+      if (!sameResponse(existing, payload, draft.selfAnswer.skipped, round.id)) {
+        writes.push(upsertAnswer(repo, {
+          userId,
+          coupleId: round.coupleId,
+          questionId: draft.questionId,
+          roundId: round.id,
+          payload,
+          skipped: draft.selfAnswer.skipped,
+        }, existing));
+      }
     }
     if (draft.prediction && guessMode) {
       const kind = draft.prediction.kind ?? (round.mode === "reverse" ? "reverse" : "partner");
       const subjectId = kind === "reverse" ? userId : partner?.userId;
       if (!subjectId) continue;
-      writes.push(upsertPrediction(repo, {
-        predictorId: userId,
-        subjectId,
-        coupleId: round.coupleId,
-        questionId: draft.questionId,
-        roundId: round.id,
-        kind,
-        payload: draft.prediction.payload,
-        skipped: draft.prediction.skipped,
-      }, existingPredictions.find((prediction) => prediction.questionId === draft.questionId && prediction.kind === kind) ?? null));
+      const existing = existingPredictions.find((prediction) => prediction.questionId === draft.questionId && prediction.kind === kind) ?? null;
+      if (!sameResponse(existing, draft.prediction.payload, draft.prediction.skipped, round.id)) {
+        writes.push(upsertPrediction(repo, {
+          predictorId: userId,
+          subjectId,
+          coupleId: round.coupleId,
+          questionId: draft.questionId,
+          roundId: round.id,
+          kind,
+          payload: draft.prediction.payload,
+          skipped: draft.prediction.skipped,
+        }, existing));
+      }
     }
   }
   await Promise.all(writes);
@@ -411,6 +418,10 @@ export async function saveQuizBatch(
   await repo.update("quizSessions", prepared.data.session.id, { currentIndex: input.currentIndex, updatedAt: now() });
   return ok({ added: written.data });
   });
+}
+
+function sameResponse(existing: { payload: AnswerPayload; skipped: boolean; roundId?: string | null } | null, payload: AnswerPayload, skipped: boolean, roundId: string) {
+  return Boolean(existing && existing.roundId === roundId && existing.skipped === skipped && JSON.stringify(existing.payload) === JSON.stringify(payload));
 }
 
 async function upsertAnswer(
@@ -703,11 +714,12 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
   const partner = partnerBundle.member;
   const partnerProfile = partnerBundle.profile;
   const viewerDone = session?.status === "completed";
-  const [viewerAnswers, partnerAnswers, predictions, partnerSessions] = await Promise.all([
+  const [viewerAnswers, partnerAnswers, predictions, partnerSessions, marks] = await Promise.all([
     repo.list("userAnswers", { eq: { userId: viewerId, coupleId: current.coupleId } }),
     partner ? repo.list("userAnswers", { eq: { userId: partner.userId, coupleId: current.coupleId } }) : Promise.resolve([]),
     repo.list("answerPredictions", { eq: { coupleId: current.coupleId } }),
     partner ? repo.list("quizSessions", { eq: { userId: partner.userId, status: "completed" } }) : Promise.resolve([]),
+    repo.list("similarityMarks", { eq: { coupleId: current.coupleId } }),
   ]);
   const partnerDone = new Set(partnerSessions.map((item) => item.roundId));
   const graded: GradedQuestion[] = [];
@@ -735,7 +747,10 @@ export async function getRoundResults(repo: Repository, viewerId: string, roundI
         })
       : null;
     const revealedPartnerGuess = partnerPrediction?.roundId && partnerDone.has(partnerPrediction.roundId) ? partnerPrediction : null;
-    const comparison = comparisonFor(question, current, partner?.userId ?? null, partnerAnswer, myPrediction, partnerPrediction);
+    const mark = marks.find((item) => item.questionId === question.id && item.userId === viewerId)?.mark
+      ?? marks.find((item) => item.questionId === question.id)?.mark
+      ?? null;
+    const comparison = comparisonFor(question, current, partner?.userId ?? null, partnerAnswer, myPrediction, partnerPrediction, mark);
     graded.push({
       question,
       mine,
@@ -779,14 +794,15 @@ function comparisonFor(
   partnerAnswer: UserAnswer | null,
   myPrediction: AnswerPrediction | null,
   partnerPrediction: AnswerPrediction | null,
+  mark: "similar" | "partial" | "different" | null = null,
 ) {
   if (round.mode === "reverse") {
     if (!myPrediction || myPrediction.kind !== "reverse" || !partnerPrediction) return null;
-    return compareResponses(question, { payload: partnerPrediction.payload, skipped: partnerPrediction.skipped }, { payload: myPrediction.payload, skipped: myPrediction.skipped });
+    return compareResponses(question, { payload: partnerPrediction.payload, skipped: partnerPrediction.skipped }, { payload: myPrediction.payload, skipped: myPrediction.skipped }, mark);
   }
   if (!myPrediction || !partnerId || !partnerAnswer) return null;
   if (!isPartnerPrediction({ kind: myPrediction.kind, predictorId: myPrediction.predictorId, subjectId: myPrediction.subjectId, actualUserId: partnerId })) return null;
-  return compareResponses(question, { payload: partnerAnswer.payload, skipped: partnerAnswer.skipped }, { payload: myPrediction.payload, skipped: myPrediction.skipped });
+  return compareResponses(question, { payload: partnerAnswer.payload, skipped: partnerAnswer.skipped }, { payload: myPrediction.payload, skipped: myPrediction.skipped }, mark);
 }
 
 export async function personalSummary(repo: Repository, userId: string, roundId: string) {
@@ -855,6 +871,17 @@ export async function listRoundCards(repo: Repository, userId: string) {
       return { round, mine, partnerDone };
     })
     .sort((a, b) => b.round.updatedAt.localeCompare(a.round.updatedAt));
+}
+
+export async function listQuizHistory(repo: Repository, userId: string) {
+  const [items, snapshots] = await Promise.all([
+    listMySessions(repo, userId),
+    repo.list("scoreSnapshots", { eq: { userId } }),
+  ]);
+  return items.map((item) => ({
+    ...item,
+    snapshot: snapshots.find((row) => row.roundId === item.round.id) ?? null,
+  }));
 }
 
 export async function listMySessions(repo: Repository, userId: string) {

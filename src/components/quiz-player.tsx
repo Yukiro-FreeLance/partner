@@ -25,8 +25,9 @@ export type PlayerQuestion = {
 
 type Draft = { payload: AnswerPayload; skipped: boolean };
 
-export function QuizPlayer({ sessionId, mode, title, questions, partnerName, timerSeconds, initialIndex, initial }: {
+export function QuizPlayer({ sessionId, roundId, mode, title, questions, partnerName, timerSeconds, initialIndex, initial }: {
   sessionId: string;
+  roundId: string;
   mode: QuizMode;
   title: string;
   questions: PlayerQuestion[];
@@ -52,6 +53,8 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   const [submitting, setSubmitting] = useState(false);
   const [seconds, setSeconds] = useState(timerSeconds);
   const saving = useRef(Promise.resolve());
+  const savedIndex = useRef(initialIndex);
+  const advanceTimer = useRef<number | null>(null);
   const confirmed = useRef<Map<string, string> | null>(null);
   if (!confirmed.current) {
     const saved = new Map<string, string>();
@@ -64,6 +67,10 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   const step = steps[index];
   const stepRef = useRef(step);
   stepRef.current = step;
+
+  useEffect(() => {
+    router.prefetch(`/play/results/${roundId}`);
+  }, [router, roundId]);
 
   useEffect(() => {
     if (!timerSeconds) return;
@@ -98,18 +105,24 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   }
 
   function enqueueSave(payload: { questionId: string; currentIndex: number; selfAnswer: Draft | null; prediction: Draft | null }) {
+    const saved = confirmed.current;
+    const selfSame = !payload.selfAnswer || encodeDraft(payload.selfAnswer) === (saved?.get(`${payload.questionId}:self`) ?? "");
+    const guessSame = !payload.prediction || encodeDraft(payload.prediction) === (saved?.get(`${payload.questionId}:guess`) ?? "");
+    if (selfSame && guessSame && payload.currentIndex === savedIndex.current) return;
     saving.current = saving.current.then(async () => {
       const result = await postQuiz("/api/quiz/save", { sessionId, ...payload }) as { ok?: boolean; error?: string; data?: { added?: PlayerQuestion[] } };
       if (!result?.ok) {
         if (result?.error && result.error !== "This quiz has already been submitted.") setError(result.error);
         return;
       }
+      savedIndex.current = payload.currentIndex;
       if (confirmed.current) markSaved(confirmed.current, payload.questionId, payload.selfAnswer, payload.prediction);
       rememberAdded(payload.questionId, (result.data?.added ?? []).map(toPlayerQuestion));
     }).catch(() => setError("Could not save this answer. Try again."));
   }
 
   function go(nextIndex: number) {
+    if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
     if (!step) return;
     if (nextIndex > index && !draft.skipped && !hasPayload(draft.payload)) {
       setError("Choose an answer, or skip this question.");
@@ -127,10 +140,36 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
     });
   }
 
+  function pickChoice(payload: AnswerPayload) {
+    if (!step || index >= steps.length - 1) {
+      update(payload, false);
+      return;
+    }
+    const questionId = step.question.id;
+    const phase = step.phase;
+    const stored = drafts[questionId] ?? {};
+    const phaseDraft = sharedDraft(phase, { payload, skipped: false });
+    const nextIndex = index + 1;
+    setDrafts((current) => ({ ...current, [questionId]: { ...current[questionId], [phase]: { payload, skipped: false } } }));
+    setError("");
+    if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
+    advanceTimer.current = window.setTimeout(() => {
+      setIndex(nextIndex);
+      enqueueSave({
+        questionId,
+        currentIndex: nextIndex,
+        selfAnswer: phase === "self" ? phaseDraft : stored.self ?? null,
+        prediction: phase === "guess" ? phaseDraft : stored.guess ?? null,
+      });
+    }, 90);
+  }
+
   async function submitQuiz() {
     if (!step) return;
+    if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
     setSubmitting(true);
     setError("");
+    await saving.current;
     const stored = drafts[step.question.id] ?? {};
     const phaseDraft = sharedDraft(step.phase, draft);
     const merged = { ...drafts, [step.question.id]: { ...stored, [step.phase]: phaseDraft } };
@@ -178,7 +217,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
   const minutes = Math.max(1, Math.round((steps.length * 25) / 60));
   const choice = ["single", "boolean", "yesno", "either", "emoji", "image"].includes(step.question.answerType);
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 py-4 lg:max-w-xl lg:py-8">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg touch-manipulation flex-col px-4 py-4 lg:max-w-xl lg:py-8">
       <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2">
         {index === 0 ? (
           <AlertDialog>
@@ -199,7 +238,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
         <p className="text-sm font-medium text-primary tabular-nums">{index + 1} / {steps.length}</p>
       </div>
       <Progress className="mt-3 h-1.5" value={((index + 1) / steps.length) * 100} aria-label={`Question ${index + 1} of ${steps.length}`} />
-      <motion.section key={`${step.question.id}-${step.phase}`} initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.25 }} className="mt-8">
+      <motion.section key={`${step.question.id}-${step.phase}`} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.12 }} className="mt-8">
         <div className="text-center">
           <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-[#fde7f3] text-rose"><Heart className="size-7 fill-rose" aria-hidden /></span>
           <p className="mt-4 text-sm text-muted-foreground">{step.phase === "self" ? "Your answer" : "Guess mode"} · {step.question.category}</p>
@@ -208,7 +247,7 @@ export function QuizPlayer({ sessionId, mode, title, questions, partnerName, tim
         </div>
         {step.question.sensitive && step.phase === "self" && <p className="mt-4 text-center text-sm text-muted-foreground">Your answer is shared with your partner after you both finish. Skip it if you would rather not answer.</p>}
         <div className="mt-6">
-          <AnswerControl question={step.question} draft={draft} onChange={update} />
+          <AnswerControl question={step.question} draft={draft} onChange={update} onChoice={choice ? pickChoice : undefined} />
         </div>
       </motion.section>
       {error && <p className="mt-4 text-sm text-destructive" role="alert">{error}</p>}
@@ -269,7 +308,7 @@ function hasPayload(payload: AnswerPayload) {
   return Boolean(payload.choice || payload.choices?.length || typeof payload.scale === "number" || payload.ranking?.length || payload.text || payload.date || payload.mediaId);
 }
 
-function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion; draft: Draft; onChange: (payload: AnswerPayload, skipped?: boolean) => void }) {
+function AnswerControl({ question, draft, onChange, onChoice }: { question: PlayerQuestion; draft: Draft; onChange: (payload: AnswerPayload, skipped?: boolean) => void; onChoice?: (payload: AnswerPayload) => void }) {
   const type = question.answerType;
   if (["single", "boolean", "yesno", "either", "emoji", "image"].includes(type)) {
     return (
@@ -277,7 +316,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
         {question.options.map((option) => {
           const selected = draft.payload.choice === option.value;
           return (
-            <button key={option.value} type="button" data-testid="quiz-option" aria-pressed={selected} onClick={() => onChange({ ...draft.payload, choice: option.value, ...(question.sensitive ? { shareWithPartner: true } : {}) }, false)} className={`flex min-h-14 items-center gap-3 rounded-full border px-4 py-3 text-left transition ${type === "image" ? "flex-col rounded-3xl p-3" : ""} ${selected ? "border-primary bg-[#f3e8ff] ring-2 ring-primary shadow-[0_10px_28px_-16px_rgb(109_40_217)]" : "border-[#f1e7f6] bg-white"}`}>
+            <button key={option.value} type="button" data-testid="quiz-option" aria-pressed={selected} onClick={() => { const payload = { ...draft.payload, choice: option.value, ...(question.sensitive ? { shareWithPartner: true } : {}) }; if (onChoice) onChoice(payload); else onChange(payload, false); }} className={`flex min-h-14 items-center gap-3 rounded-full border px-4 py-3 text-left transition ${type === "image" ? "flex-col rounded-3xl p-3" : ""} ${selected ? "border-primary bg-[#f3e8ff] ring-2 ring-primary shadow-[0_10px_28px_-16px_rgb(109_40_217)]" : "border-[#f1e7f6] bg-white"}`}>
               {option.imageUrl && <img src={option.imageUrl} alt="" className="h-24 w-full rounded-2xl object-cover" />}
               {type !== "image" && <span className={`size-5 shrink-0 rounded-full border-2 ${selected ? "border-primary bg-primary" : "border-[#e9d5ff] bg-white"}`} style={selected ? undefined : { background: swatch(option.label) }} aria-hidden />}
               <span className={`min-w-0 flex-1 ${selected ? "font-semibold text-primary" : "font-medium"}`}>{option.label}</span>
@@ -323,7 +362,7 @@ function AnswerControl({ question, draft, onChange }: { question: PlayerQuestion
       </div>
     );
   }
-  if (type === "date") return <input type="date" className="h-11 rounded-2xl border bg-card px-3" value={draft.payload.date ?? ""} onChange={(event) => onChange({ date: event.target.value }, false)} />;
+  if (type === "date") return <input type="date" className="h-12 w-full rounded-2xl border bg-card px-3 text-base" value={draft.payload.date ?? ""} onChange={(event) => onChange({ date: event.target.value }, false)} />;
   if (type === "voice") {
     return (
       <div className="grid gap-3">

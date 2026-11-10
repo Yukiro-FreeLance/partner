@@ -12,6 +12,7 @@ const destinations = [
   { href: "/play#deep-dive", label: "Deep Dive" },
   { href: "/play/custom", label: "Custom Quiz" },
   { href: "/play/library", label: "Question Library" },
+  { href: "/play/history", label: "Quiz history" },
   { href: "/personality", label: "Personality Lab" },
   { href: "/connection", label: "Our Connection" },
   { href: "/memories", label: "Memories" },

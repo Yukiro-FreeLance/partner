@@ -404,6 +404,7 @@ export async function similarityAction(formData: FormData) {
   const repo = await getRepository();
   await markSimilarity(repo, user.profile.id, formString(formData, "questionId"), mark);
   revalidatePath("/connection");
+  revalidatePath("/play/results", "layout");
 }
 
 export async function personalityAnswerAction(input: { sessionId: string; questionId: string; payload: AnswerPayload; skipped: boolean }) {

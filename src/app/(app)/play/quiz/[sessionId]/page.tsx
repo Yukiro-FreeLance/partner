@@ -13,15 +13,18 @@ export default async function QuizPage({ params }: { params: Promise<{ sessionId
   const repo = await getRepository();
   const session = await repo.find("quizSessions", { eq: { id: sessionId, userId: user.profile.id } });
   if (!session) notFound();
-  const view = await joinRound(repo, user.profile.id, session.roundId);
-  if (!view.ok) notFound();
-  if (view.data.session.status === "completed") {
+  if (session.status === "completed") {
     const { redirect } = await import("next/navigation");
-    redirect(`/play/results/${view.data.round.id}`);
+    redirect(`/play/results/${session.roundId}`);
   }
-  const partner = await otherPartner(repo, view.data.round.coupleId, user.profile.id);
-  const partnerProfile = partner ? await repo.find("profiles", { eq: { id: partner.userId } }) : null;
-  const categories = await repo.list("questionCategories", {});
+  const round = await repo.find("quizRounds", { eq: { id: session.roundId } });
+  if (!round) notFound();
+  const [view, categories, partnerProfile] = await Promise.all([
+    joinRound(repo, user.profile.id, session.roundId),
+    repo.list("questionCategories", {}),
+    otherPartner(repo, round.coupleId, user.profile.id).then((partner) => partner ? repo.find("profiles", { eq: { id: partner.userId } }) : null),
+  ]);
+  if (!view.ok) notFound();
   const questions: PlayerQuestion[] = view.data.questions.map((question) => ({
     id: question.id,
     selfPrompt: question.selfPrompt,
@@ -37,5 +40,5 @@ export default async function QuizPage({ params }: { params: Promise<{ sessionId
   const initial: Record<string, { self?: { payload: typeof view.data.answers[number]["payload"]; skipped: boolean }; guess?: { payload: typeof view.data.predictions[number]["payload"]; skipped: boolean } }> = {};
   for (const answer of view.data.answers) initial[answer.questionId] = { ...initial[answer.questionId], self: { payload: answer.payload, skipped: answer.skipped } };
   for (const prediction of view.data.predictions) initial[prediction.questionId] = { ...initial[prediction.questionId], guess: { payload: prediction.payload, skipped: prediction.skipped } };
-  return <QuizPlayer sessionId={view.data.session.id} mode={view.data.round.mode} title={view.data.round.title} questions={questions} partnerName={partnerProfile?.displayName ?? "your partner"} timerSeconds={view.data.round.timerSeconds} initialIndex={view.data.session.currentIndex} initial={initial} />;
+  return <QuizPlayer sessionId={view.data.session.id} roundId={view.data.round.id} mode={view.data.round.mode} title={view.data.round.title} questions={questions} partnerName={partnerProfile?.displayName ?? "your partner"} timerSeconds={view.data.round.timerSeconds} initialIndex={view.data.session.currentIndex} initial={initial} />;
 }

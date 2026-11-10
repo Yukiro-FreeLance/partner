@@ -22,6 +22,7 @@ const playLinks = [
   { href: "/play#deep-dive", label: "Deep Dive" },
   { href: "/play/custom", label: "Custom Quiz" },
   { href: "/play/library", label: "Question Library" },
+  { href: "/play/history", label: "Quiz history" },
 ];
 
 export function AppShell({ children, name, avatarUrl, demo, unread, locale, impersonating = false, superAdmin = false, tracksCycle = false, assistantName = "WenX" }: { children: React.ReactNode; name: string; avatarUrl: string | null; demo: boolean; unread: number; locale: string; impersonating?: boolean; superAdmin?: boolean; tracksCycle?: boolean; assistantName?: string }) {
